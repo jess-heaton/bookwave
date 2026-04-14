@@ -3,9 +3,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import aiosqlite
-import numpy as np
-import soundfile as sf
-from kokoro import KPipeline
 try:
     import pymupdf as fitz
 except ImportError:
@@ -168,6 +165,10 @@ def _run_kokoro_modal(text: str, voice: str, out_path: str):
 def _run_kokoro(text: str, voice: str, out_path: str):
     if USE_MODAL:
         return _run_kokoro_modal(text, voice, out_path)
+    # Local CPU fallback — imports done lazily so cloud deploys don't need these libs.
+    import numpy as np
+    import soundfile as sf
+    from kokoro import KPipeline
     lang = _lang_for_voice(voice)
     if lang not in _pipeline:
         print("[TTS] Loading Kokoro model (first run — downloading ~300MB)…")
