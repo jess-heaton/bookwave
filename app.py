@@ -195,7 +195,8 @@ async def tts_chapter(chapter_id, text, voice):
     if len(text.split()) < 20:
         return None
 
-    out = str(AUDIO / f"{chapter_id}.wav")
+    ext = "mp3" if USE_MODAL else "wav"
+    out = str(AUDIO / f"{chapter_id}.{ext}")
     try:
         await asyncio.wait_for(
             asyncio.get_event_loop().run_in_executor(
@@ -208,7 +209,7 @@ async def tts_chapter(chapter_id, text, voice):
 
     if not Path(out).exists() or Path(out).stat().st_size < 100:
         raise RuntimeError("TTS produced no audio")
-    return f"/audio/{chapter_id}.wav"
+    return f"/audio/{chapter_id}.{ext}"
 
 async def generate_book(book_id, voice_id):
     print(f"\n[GEN] Starting book {book_id}")

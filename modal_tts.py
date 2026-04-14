@@ -29,13 +29,13 @@ _pipelines = {}
 @app.function(
     gpu="T4",
     timeout=1800,
-    # Keep the container warm for 5 min after last call so consecutive
-    # chapters re-use the loaded model.
     scaledown_window=300,
 )
 def kokoro_tts(text: str, voice: str) -> bytes:
-    """Generate WAV audio bytes for `text` using Kokoro voice `voice`."""
+    """Generate MP3 audio bytes for `text` using Kokoro voice `voice`."""
     import io
+    import subprocess
+    import tempfile
     import numpy as np
     import soundfile as sf
     from kokoro import KPipeline
@@ -51,9 +51,19 @@ def kokoro_tts(text: str, voice: str) -> bytes:
     if not chunks:
         raise RuntimeError("Kokoro returned no audio")
 
-    buf = io.BytesIO()
-    sf.write(buf, np.concatenate(chunks), 24000, format="WAV")
-    return buf.getvalue()
+    # Write WAV to temp file then convert to MP3 with ffmpeg
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wav_f:
+        wav_path = wav_f.name
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as mp3_f:
+        mp3_path = mp3_f.name
+
+    sf.write(wav_path, np.concatenate(chunks), 24000)
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", wav_path, "-codec:a", "libmp3lame", "-qscale:a", "3", mp3_path],
+        check=True, capture_output=True
+    )
+    with open(mp3_path, "rb") as f:
+        return f.read()
 
 
 @app.local_entrypoint()
