@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+storage/
+test.wav
+.env
+.modal/
+
+# Old scrapped React attempt — not used anymore
+frontend/
+backend/
+start.bat
