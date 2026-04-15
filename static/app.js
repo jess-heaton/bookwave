@@ -83,19 +83,17 @@ async function renderLibrary() {
 
   const statsBar = (stats.books > 0)
     ? `<div class="stats-bar">
-        <span class="stats-item">📚 <strong>${stats.books}</strong> audiobook${stats.books !== 1 ? 's' : ''}</span>
+        <span class="stats-item"><strong>${stats.books}</strong> audiobook${stats.books !== 1 ? 's' : ''}</span>
         <span class="stats-sep">·</span>
-        <span class="stats-item">🎧 <strong>${stats.hours}+</strong> hours of audio</span>
-        <span class="stats-sep">·</span>
-        <span class="stats-item">Free forever</span>
+        <span class="stats-item"><strong>${stats.hours}+</strong> hrs of audio</span>
        </div>`
     : '';
 
   const grid = books.length === 0
     ? `<div class="empty">
-        <div class="empty-icon">🎧</div>
-        <h2>The library is empty — be the first to add a book</h2>
-        <p>Upload any PDF ebook and it becomes a free audiobook for everyone.<br>No account needed. No cost. Just press upload.</p>
+        <div class="empty-icon">${hpIconLg()}</div>
+        <h2>Be the first to add a book</h2>
+        <p>Upload any PDF ebook and it becomes a free audiobook for everyone.<br>No account needed.</p>
         <button class="btn btn-primary" onclick="openUpload()" style="margin-top:8px">Upload a Book</button>
        </div>`
     : `<div class="grid">${books.map(bookCard).join('')}</div>`;
@@ -104,10 +102,10 @@ async function renderLibrary() {
     <div class="page">
       <div class="header">
         <div class="logo">
-          <span class="logo-icon">🎧</span>
+          <div class="logo-icon">${hpIconSm()}</div>
           <div>
             <div class="logo-text">Bookwave</div>
-            <div class="logo-sub">Free community audiobook library</div>
+            <div class="logo-sub">Community audiobook library</div>
           </div>
         </div>
         <button class="btn btn-primary" onclick="openUpload()">+ Add a Book</button>
@@ -141,7 +139,7 @@ function bookCard(b) {
        <div style="color:var(--muted);font-size:11px;margin-top:3px">${pct}% · ${b.done}/${b.total} chapters</div>` : '';
   const img = b.cover
     ? `<img src="${b.cover}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
-    : `<div class="book-cover-placeholder">📖</div>`;
+    : `<div class="book-cover-placeholder">${bookSvg(38)}</div>`;
   return `
     <div class="book-card" onclick="navigate('book','${b.id}');push('#/book/${b.id}')">
       <div class="book-cover">${img}<div class="cover-badge">${statusBadge(b.status)}</div></div>
@@ -160,8 +158,8 @@ function openUpload() {
     <div class="overlay" id="upload-overlay" onclick="closeUploadIfBg(event)">
       <div class="modal">
         <div class="modal-header">
-          <h2>Add a Book to the Library</h2>
-          <button class="ibtn" onclick="closeUpload()">✕</button>
+          <h2>Add a Book</h2>
+          <button class="ibtn" onclick="closeUpload()">${closeIcon()}</button>
         </div>
         <div class="modal-note">
           Once added, this audiobook will be visible to everyone in the community library.
@@ -169,7 +167,7 @@ function openUpload() {
         <div class="drop-zone" id="drop-zone"
              ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event)"
              onclick="document.getElementById('file-input').click()">
-          <div class="drop-icon">📚</div>
+          <div class="drop-icon">${uploadSvg()}</div>
           <div class="drop-title" id="drop-title">Drop your PDF here</div>
           <div class="drop-sub" id="drop-sub">or click to browse · PDF only</div>
         </div>
@@ -278,7 +276,7 @@ function renderBook(progData) {
     if (b.status === 'uploaded' || b.status === 'complete' || b.status === 'error') {
       return `<div class="voice-row">
         <select class="voice-select" id="voice-sel">${voiceOptions}</select>
-        <button class="btn btn-primary" onclick="startGen()">🎙 ${b.status === 'complete' ? 'Re-generate' : 'Generate Audiobook'}</button>
+        <button class="btn btn-primary" onclick="startGen()">${b.status === 'complete' ? 'Re-generate' : 'Generate Audiobook'}</button>
         ${firstReadyId ? `<button class="btn btn-primary" onclick="playChapter('${firstReadyId}')" style="background:var(--success)">▶ Play</button>` : ''}
       </div>`;
     }
@@ -300,7 +298,7 @@ function renderBook(progData) {
         </div>
         ${firstReadyId
           ? `<button class="btn btn-primary gen-play-btn" onclick="playChapter('${firstReadyId}')">▶ Start listening · ${ready.length} chapter${ready.length !== 1 ? 's' : ''} ready</button>`
-          : '<div class="gen-hint">The first chapter will be ready in a minute — you can start listening then.</div>'}
+          : '<div class="gen-hint">First chapter ready in about a minute.</div>'}
       </div>`;
     }
     return '';
@@ -338,7 +336,7 @@ function renderBook(progData) {
       <button class="btn btn-ghost back-btn" onclick="navigate('library');push('#/')">← Library</button>
       <div class="hero">
         <div class="hero-cover">
-          ${b.cover ? `<img src="${b.cover}" alt=""/>` : '<div class="hero-cover-ph">📖</div>'}
+          ${b.cover ? `<img src="${b.cover}" alt=""/>` : `<div class="hero-cover-ph">${bookSvg(52)}</div>`}
         </div>
         <div class="hero-info">
           <div class="hero-badge">${statusBadge(b.status)}</div>
@@ -501,7 +499,7 @@ function renderPlayerBar() {
     <div class="player-body">
       <div class="player-info">
         <div class="player-thumb">
-          ${book.cover ? `<img src="${book.cover}" alt=""/>` : '<div class="player-thumb-ph">📖</div>'}
+          ${book.cover ? `<img src="${book.cover}" alt=""/>` : `<div class="player-thumb-ph">${bookSvg(18)}</div>`}
         </div>
         <div class="player-text">
           <div class="player-chap" id="player-chap">${esc(ch.title)}</div>
@@ -521,7 +519,7 @@ function renderPlayerBar() {
       <div class="player-right">
         <button class="speed-btn" onclick="cycleSpeed()">${SPEEDS[speedIdx]}×</button>
         <div class="vol-row">
-          🔉
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--muted);flex-shrink:0"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
           <input type="range" min="0" max="1" step="0.05" value="${audio.volume}" style="width:70px" onchange="audio.volume=+this.value"/>
         </div>
         <button class="ibtn clist-btn${showChapPanel?' active':''}" onclick="toggleChapPanel()" title="Chapters">${listIcon()}</button>
@@ -584,6 +582,11 @@ function renderChapPanel() {
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
+const bookSvg     = (sz=36) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
+const closeIcon   = () => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+const hpIconLg    = () => `<svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+const hpIconSm    = () => `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>`;
+const uploadSvg   = () => `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
 const playIcon    = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
 const pauseIcon   = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 const prevIcon    = () => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`;
