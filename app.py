@@ -24,7 +24,7 @@ COVERS = STORE / "covers"
 AUDIO  = STORE / "audio"
 UPLOADS= STORE / "uploads"
 DB     = STORE / "books.db"
-print(f"[STORAGE] {STORE}")
+print(f"[Freedible] storage: {STORE}")
 
 for d in (STATIC, COVERS, AUDIO, UPLOADS):
     d.mkdir(parents=True, exist_ok=True)
@@ -434,11 +434,11 @@ if __name__ == "__main__":
     env_port = os.environ.get("PORT")
     if env_port:
         port = int(env_port)
-        print(f"\n  Bookwave is running on port {port}\n")
+        print(f"\n  Freedible is running on port {port}\n")
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
     else:
         port = find_port()
         url = f"http://localhost:{port}"
-        print(f"\n  Bookwave is running → {url}\n  Press Ctrl+C to stop.\n")
+        print(f"\n  Freedible is running → {url}\n  Press Ctrl+C to stop.\n")
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")

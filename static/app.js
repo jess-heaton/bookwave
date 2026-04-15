@@ -73,7 +73,7 @@ function statusBadge(s) {
 
 // ── Library ───────────────────────────────────────────────────────────────────
 async function renderLibrary() {
-  document.title = 'Bookwave — Free Audiobook Library';
+  document.title = 'Freedible — Listen to any book, free';
 
   const [books, stats] = await Promise.all([
     api('GET', '/api/books').catch(() => []),
@@ -81,38 +81,47 @@ async function renderLibrary() {
   ]);
   state.books = books;
 
-  const statsBar = (stats.books > 0)
-    ? `<div class="stats-bar">
-        <span class="stats-item"><strong>${stats.books}</strong> audiobook${stats.books !== 1 ? 's' : ''}</span>
-        <span class="stats-sep">·</span>
-        <span class="stats-item"><strong>${stats.hours}+</strong> hrs of audio</span>
+  const hasBooks = books.length > 0;
+
+  const hero = hasBooks
+    ? `<div class="landing-hero">
+        <h1>Listen to any book, free.</h1>
        </div>`
+    : `<div class="landing-hero">
+        <h1>Listen to any book, free.</h1>
+        <p>Upload any PDF ebook and it becomes a free audiobook for everyone.<br>No sign-up. No cost.</p>
+       </div>
+       <div class="how">
+         <div class="how-step">
+           <div class="how-num">01</div>
+           <div class="how-title">Upload a PDF</div>
+           <div class="how-desc">Drop any ebook PDF. We extract the text and split it into chapters automatically.</div>
+         </div>
+         <div class="how-step">
+           <div class="how-num">02</div>
+           <div class="how-title">Narrated automatically</div>
+           <div class="how-desc">Each chapter is read aloud using a high-quality neural voice. Takes a few minutes per book.</div>
+         </div>
+         <div class="how-step">
+           <div class="how-num">03</div>
+           <div class="how-title">Free for everyone</div>
+           <div class="how-desc">The audiobook lives in the shared library — anyone can stream it, free, forever.</div>
+         </div>
+       </div>
+       <button class="btn btn-primary" onclick="openUpload()">Upload the First Book</button>`;
+
+  const libSection = hasBooks
+    ? `<div class="lib-head">
+        <span class="lib-title">Library</span>
+        ${stats.books > 0 ? `<span class="lib-meta">${stats.books} book${stats.books !== 1 ? 's' : ''} · ${stats.hours}+ hrs of audio</span>` : ''}
+       </div>
+       <div class="grid">${books.map(bookCard).join('')}</div>`
     : '';
 
-  const grid = books.length === 0
-    ? `<div class="empty">
-        <div class="empty-icon">${hpIconLg()}</div>
-        <h2>Be the first to add a book</h2>
-        <p>Upload any PDF ebook and it becomes a free audiobook for everyone.<br>No account needed.</p>
-        <button class="btn btn-primary" onclick="openUpload()" style="margin-top:8px">Upload a Book</button>
-       </div>`
-    : `<div class="grid">${books.map(bookCard).join('')}</div>`;
-
   document.getElementById('app').innerHTML = `
-    <div class="page">
-      <div class="header">
-        <div class="logo">
-          <div class="logo-icon">${hpIconSm()}</div>
-          <div>
-            <div class="logo-text">Bookwave</div>
-            <div class="logo-sub">Community audiobook library</div>
-          </div>
-        </div>
-        <button class="btn btn-primary" onclick="openUpload()">+ Add a Book</button>
-      </div>
-      ${statsBar}
-      ${books.length > 0 ? '<div class="section-label" style="margin-bottom:16px">Community Library</div>' : ''}
-      ${grid}
+    <div class="page" style="padding-top:0">
+      ${hero}
+      ${libSection}
     </div>`;
 
   if (books.some(b => b.status === 'generating')) {
@@ -140,12 +149,13 @@ function bookCard(b) {
   const img = b.cover
     ? `<img src="${b.cover}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
     : `<div class="book-cover-placeholder">${bookSvg(38)}</div>`;
+  const overlay = b.status === 'complete'
+    ? `<div class="play-ov"><div class="play-ov-btn">${playIcon()}</div></div>` : '';
   return `
     <div class="book-card" onclick="navigate('book','${b.id}');push('#/book/${b.id}')">
-      <div class="book-cover">${img}<div class="cover-badge">${statusBadge(b.status)}</div></div>
+      <div class="book-cover">${img}${overlay}<div class="cover-badge">${statusBadge(b.status)}</div></div>
       <div class="book-title">${esc(b.title)}</div>
       ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
-      <div class="book-meta">${b.total} chapter${b.total !== 1 ? 's' : ''}</div>
       ${progBar}
     </div>`;
 }
@@ -230,7 +240,7 @@ async function loadBook(id) {
   const book = await api('GET', `/api/books/${id}`).catch(() => null);
   if (!book) { navigate('library'); push('#/'); return; }
   state.book = book;
-  document.title = `${book.title} — Bookwave`;
+  document.title = `${book.title} — Freedible`;
   renderBook();
   if (book.status === 'generating') startPoll(id);
 }
@@ -254,7 +264,7 @@ function shareBook() {
   const url = location.origin + '/#/book/' + state.book.id;
   navigator.clipboard.writeText(url).then(() => {
     const btn = document.getElementById('share-btn');
-    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = 'Share'; }, 2000); }
+    if (btn) { btn.textContent = 'Link copied'; setTimeout(() => { btn.textContent = 'Share'; }, 2000); }
   });
 }
 

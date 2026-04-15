@@ -3,16 +3,22 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Bookwave — Free Audiobook Library</title>
-<meta name="description" content="Convert any ebook PDF into a free audiobook. Community-built, free forever. Upload, generate, and listen — or browse what others have shared."/>
-<meta property="og:title" content="Bookwave — Free Audiobook Library"/>
-<meta property="og:description" content="Upload a PDF, get a full audiobook in minutes. Free, no account needed. Browse the shared community library."/>
+<title>Freedible — Listen to any book, free</title>
+<meta name="description" content="Free community audiobook library. Upload any PDF ebook and we narrate it automatically. No sign-up, no cost."/>
+<meta property="og:title" content="Freedible — Listen to any book, free"/>
+<meta property="og:description" content="Community-built audiobooks. Upload a PDF, get a full audiobook in minutes. Free, no account needed."/>
 <meta property="og:type" content="website"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/static/style.css"/>
 </head>
 <body>
+<header class="site-header" id="site-header">
+  <div class="site-header-inner">
+    <div class="wordmark" onclick="navigate('library');push('#/')">Freedible</div>
+    <button class="btn btn-primary" onclick="openUpload()">Add a Book</button>
+  </div>
+</header>
 <div id="app"></div>
 <div id="player" class="player hidden"></div>
 <script src="/static/app.js"></script>

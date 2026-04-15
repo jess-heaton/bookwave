@@ -48,7 +48,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .logo-sub{color:var(--muted);font-size:13px;margin-top:2px}
 
 /* Book grid */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:22px}
 .book-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px;cursor:pointer;transition:all .18s ease}
 .book-card:hover{background:var(--card-hover);transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,.5)}
 .book-cover{position:relative;padding-top:138%;border-radius:var(--r-sm);overflow:hidden;background:var(--bg);margin-bottom:12px}
@@ -168,3 +168,38 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
 .chap-panel-item{padding:9px 16px;cursor:pointer;font-size:13px;transition:background .1s}
 .chap-panel-item:hover{background:var(--card)}
 .chap-panel-item.active{color:var(--accent);font-weight:700}
+
+/* ── Freedible ────────────────────────────────────────────────────────────── */
+.site-header{position:sticky;top:0;z-index:100;background:rgba(14,14,24,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.site-header-inner{max-width:1200px;margin:0 auto;padding:0 24px;height:62px;display:flex;align-items:center;justify-content:space-between}
+.wordmark{font-size:21px;font-weight:800;letter-spacing:-.6px;color:var(--text);cursor:pointer;user-select:none}
+
+/* Landing */
+.landing-hero{padding:68px 0 0}
+.landing-hero h1{font-size:clamp(28px,4.5vw,50px);font-weight:800;letter-spacing:-1.5px;line-height:1.1;margin-bottom:12px}
+.landing-hero p{color:var(--muted);font-size:16px;line-height:1.65;max-width:500px;margin-bottom:0}
+
+/* Library section header */
+.lib-head{display:flex;align-items:center;justify-content:space-between;margin:44px 0 18px}
+.lib-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
+.lib-meta{font-size:12px;color:var(--muted)}
+
+/* Book card play overlay */
+.play-ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.48);opacity:0;transition:opacity .18s;border-radius:var(--r-sm)}
+.book-card:hover .play-ov{opacity:1}
+.play-ov-btn{width:50px;height:50px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 4px 24px rgba(0,0,0,.45);transition:transform .15s}
+.book-card:hover .play-ov-btn{transform:scale(1.06)}
+
+/* How it works (empty state) */
+.how{display:flex;gap:0;margin:44px 0 40px;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+.how-step{flex:1;padding:28px 26px;background:var(--card)}
+.how-step+.how-step{border-left:1px solid var(--border)}
+.how-num{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.how-title{font-weight:700;font-size:15px;margin-bottom:6px}
+.how-desc{color:var(--muted);font-size:13px;line-height:1.6}
+
+@media(max-width:600px){
+  .how{flex-direction:column}
+  .how-step+.how-step{border-left:none;border-top:1px solid var(--border)}
+  .landing-hero h1{letter-spacing:-.8px}
+}
