@@ -408,6 +408,18 @@ async def delete_book(bid: str):
 async def list_voices():
     return [{"id": v, "name": n} for v, n in KOKORO_VOICES]
 
+@app.get("/api/stats")
+async def get_stats():
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT COUNT(*) as n FROM books WHERE status='complete'") as c:
+            books = (await c.fetchone())["n"]
+        async with db.execute("SELECT SUM(words) as w FROM chapters WHERE audio != ''") as c:
+            row = await c.fetchone()
+            words = row["w"] or 0
+    hours = round(words / 9000)  # ~150 wpm × 60 min
+    return {"books": books, "hours": hours}
+
 # ── Run ───────────────────────────────────────────────────────────────────────
 def find_port(start=7777):
     for p in range(start, start+50):

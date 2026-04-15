@@ -76,8 +76,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .drop-icon{font-size:38px;margin-bottom:12px}
 .drop-title{font-weight:600;margin-bottom:5px}
 .drop-sub{color:var(--muted);font-size:13px}
+.modal-note{background:rgba(100,140,230,.1);border:1px solid rgba(100,140,230,.2);border-radius:var(--r-sm);padding:10px 14px;font-size:13px;color:var(--muted);margin-bottom:18px}
+.legal-check{display:flex;align-items:flex-start;gap:10px;padding:12px 0;cursor:pointer;font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:6px}
+.legal-check input{margin-top:2px;accent-color:var(--accent);flex-shrink:0;width:16px;height:16px;cursor:pointer}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end}
 .error-msg{color:var(--danger);font-size:13px;margin-bottom:14px}
+
+/* Stats bar */
+.stats-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border:1px solid var(--border);border-radius:var(--r-sm);margin-bottom:24px;font-size:13px;color:var(--muted)}
+.stats-item strong{color:var(--text)}
+.stats-sep{color:var(--border)}
 
 /* Book detail */
 .back-btn{margin-bottom:28px}

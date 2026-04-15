@@ -64,7 +64,7 @@ function wordTime(w) {
 }
 function statusBadge(s) {
   return {
-    uploaded:   '<span class="badge b-blue">Not Generated</span>',
+    uploaded:   '<span class="badge b-blue">Processing</span>',
     generating: '<span class="badge b-orange">Generating…</span>',
     complete:   '<span class="badge b-green">Ready</span>',
     error:      '<span class="badge b-red">Error</span>',
@@ -73,16 +73,30 @@ function statusBadge(s) {
 
 // ── Library ───────────────────────────────────────────────────────────────────
 async function renderLibrary() {
-  document.title = 'Bookwave';
-  const books = await api('GET', '/api/books').catch(() => []);
+  document.title = 'Bookwave — Free Audiobook Library';
+
+  const [books, stats] = await Promise.all([
+    api('GET', '/api/books').catch(() => []),
+    api('GET', '/api/stats').catch(() => ({ books: 0, hours: 0 })),
+  ]);
   state.books = books;
+
+  const statsBar = (stats.books > 0)
+    ? `<div class="stats-bar">
+        <span class="stats-item">📚 <strong>${stats.books}</strong> audiobook${stats.books !== 1 ? 's' : ''}</span>
+        <span class="stats-sep">·</span>
+        <span class="stats-item">🎧 <strong>${stats.hours}+</strong> hours of audio</span>
+        <span class="stats-sep">·</span>
+        <span class="stats-item">Free forever</span>
+       </div>`
+    : '';
 
   const grid = books.length === 0
     ? `<div class="empty">
-        <div class="empty-icon">📚</div>
-        <h2>No books yet</h2>
-        <p>Upload a PDF to get started</p>
-        <button class="btn btn-primary" onclick="openUpload()">Upload your first book</button>
+        <div class="empty-icon">🎧</div>
+        <h2>The library is empty — be the first to add a book</h2>
+        <p>Upload any PDF ebook and it becomes a free audiobook for everyone.<br>No account needed. No cost. Just press upload.</p>
+        <button class="btn btn-primary" onclick="openUpload()" style="margin-top:8px">Upload a Book</button>
        </div>`
     : `<div class="grid">${books.map(bookCard).join('')}</div>`;
 
@@ -93,11 +107,13 @@ async function renderLibrary() {
           <span class="logo-icon">🎧</span>
           <div>
             <div class="logo-text">Bookwave</div>
-            <div class="logo-sub">Your personal audiobook library</div>
+            <div class="logo-sub">Free community audiobook library</div>
           </div>
         </div>
-        <button class="btn btn-primary" onclick="openUpload()">+ Add Book</button>
+        <button class="btn btn-primary" onclick="openUpload()">+ Add a Book</button>
       </div>
+      ${statsBar}
+      ${books.length > 0 ? '<div class="section-label" style="margin-bottom:16px">Community Library</div>' : ''}
       ${grid}
     </div>`;
 
@@ -122,7 +138,7 @@ function bookCard(b) {
   const pct = b.total ? Math.round(b.done / b.total * 100) : 0;
   const progBar = b.status === 'generating'
     ? `<div class="prog-track" style="margin-top:8px"><div class="prog-fill" style="width:${pct}%"></div></div>
-       <div style="color:var(--muted);font-size:11px;margin-top:3px">${pct}% · ${b.done}/${b.total}</div>` : '';
+       <div style="color:var(--muted);font-size:11px;margin-top:3px">${pct}% · ${b.done}/${b.total} chapters</div>` : '';
   const img = b.cover
     ? `<img src="${b.cover}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
     : `<div class="book-cover-placeholder">📖</div>`;
@@ -144,24 +160,36 @@ function openUpload() {
     <div class="overlay" id="upload-overlay" onclick="closeUploadIfBg(event)">
       <div class="modal">
         <div class="modal-header">
-          <h2>Add a Book</h2>
+          <h2>Add a Book to the Library</h2>
           <button class="ibtn" onclick="closeUpload()">✕</button>
+        </div>
+        <div class="modal-note">
+          Once added, this audiobook will be visible to everyone in the community library.
         </div>
         <div class="drop-zone" id="drop-zone"
              ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event)"
              onclick="document.getElementById('file-input').click()">
           <div class="drop-icon">📚</div>
           <div class="drop-title" id="drop-title">Drop your PDF here</div>
-          <div class="drop-sub" id="drop-sub">or click to browse</div>
+          <div class="drop-sub" id="drop-sub">or click to browse · PDF only</div>
         </div>
+        <label class="legal-check" id="legal-label">
+          <input type="checkbox" id="legal-cb" onchange="legalChanged()"/>
+          <span>I confirm this book is in the public domain, freely available online, or I have permission to share it.</span>
+        </label>
         <div class="error-msg" id="upload-err" style="display:none"></div>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeUpload()">Cancel</button>
-          <button class="btn btn-primary" id="upload-btn" onclick="doUpload()" disabled>Add Book</button>
+          <button class="btn btn-primary" id="upload-btn" onclick="doUpload()" disabled>Add to Library</button>
         </div>
         <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="fileChosen(this.files[0])"/>
       </div>
     </div>`);
+}
+function legalChanged() {
+  const cb = document.getElementById('legal-cb');
+  const btn = document.getElementById('upload-btn');
+  btn.disabled = !(cb.checked && uploadFile);
 }
 function closeUploadIfBg(e) { if (e.target.id === 'upload-overlay') closeUpload(); }
 function closeUpload() { document.getElementById('upload-overlay')?.remove(); }
@@ -179,7 +207,8 @@ function fileChosen(f) {
   dz.classList.add('has-file'); dz.classList.remove('dragover');
   document.getElementById('drop-title').textContent = f.name;
   document.getElementById('drop-sub').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB';
-  document.getElementById('upload-btn').disabled = false;
+  const cb = document.getElementById('legal-cb');
+  document.getElementById('upload-btn').disabled = !(cb && cb.checked);
 }
 async function doUpload() {
   if (!uploadFile) return;
@@ -194,7 +223,7 @@ async function doUpload() {
   } catch(e) {
     const el = document.getElementById('upload-err');
     el.textContent = e.message || 'Upload failed'; el.style.display = '';
-    btn.disabled = false; btn.textContent = 'Add Book';
+    btn.disabled = false; btn.textContent = 'Add to Library';
   }
 }
 
@@ -214,7 +243,6 @@ async function loadVoices() {
 }
 loadVoices();
 
-// Filter chapters into two buckets: readable (has audio or still pending) and skipped (done but no audio — boilerplate)
 function splitChapters(b) {
   const readable = [], skipped = [];
   for (const c of b.chapters) {
@@ -222,6 +250,14 @@ function splitChapters(b) {
     else readable.push(c);
   }
   return { readable, skipped };
+}
+
+function shareBook() {
+  const url = location.origin + '/#/book/' + state.book.id;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('share-btn');
+    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = 'Share'; }, 2000); }
+  });
 }
 
 function renderBook(progData) {
@@ -262,7 +298,9 @@ function renderBook(progData) {
           <span id="gen-pct">${pct}% complete</span>
           ${etaStr ? `<span id="gen-eta">${etaStr} remaining</span>` : '<span id="gen-eta"></span>'}
         </div>
-        ${firstReadyId ? `<button class="btn btn-primary gen-play-btn" onclick="playChapter('${firstReadyId}')">▶ Start listening · ${ready.length} ready</button>` : '<div class="gen-hint">Playback will be available as soon as the first chapter is ready.</div>'}
+        ${firstReadyId
+          ? `<button class="btn btn-primary gen-play-btn" onclick="playChapter('${firstReadyId}')">▶ Start listening · ${ready.length} chapter${ready.length !== 1 ? 's' : ''} ready</button>`
+          : '<div class="gen-hint">The first chapter will be ready in a minute — you can start listening then.</div>'}
       </div>`;
     }
     return '';
@@ -272,22 +310,13 @@ function renderBook(progData) {
     const isReady = ch.status === 'complete' && ch.audio;
     const isGenerating = progData?.current && progData.current === ch.title && ch.status === 'pending';
     const isActive = state.player && state.player.book.id === b.id && state.player.chapterId === ch.id;
-    const cls = [
-      'chap-row',
-      isReady ? 'clickable' : 'dimmed',
-      isActive ? 'active' : '',
-      isGenerating ? 'generating-now' : '',
-    ].filter(Boolean).join(' ');
+    const cls = ['chap-row', isReady ? 'clickable' : 'dimmed', isActive ? 'active' : '', isGenerating ? 'generating-now' : ''].filter(Boolean).join(' ');
     const num = isActive
       ? `<div class="chap-num playing">${audioLoading ? spinnerSmall() : '♪'}</div>`
       : `<div class="chap-num">${isReady ? '▶' : (isGenerating ? spinnerSmall() : '…')}</div>`;
     const badge = isGenerating
       ? '<span class="badge b-orange">Generating…</span>'
-      : {
-          complete:   '<span class="badge b-green">Ready</span>',
-          pending:    '<span class="badge b-blue">Pending</span>',
-          error:      '<span class="badge b-red">Error</span>',
-        }[ch.status] || '';
+      : { complete: '<span class="badge b-green">Ready</span>', pending: '<span class="badge b-blue">Pending</span>', error: '<span class="badge b-red">Error</span>' }[ch.status] || '';
     return `<div class="${cls}" ${isReady ? `onclick="playChapter('${ch.id}')"` : ''}>
       ${num}
       <div class="chap-body">
@@ -302,6 +331,8 @@ function renderBook(progData) {
     ? `<div class="skipped-note">${skipped.length} page${skipped.length !== 1 ? 's' : ''} skipped (copyright / front matter)</div>`
     : '';
 
+  const totalTime = wordTime(totalWords);
+
   document.getElementById('app').innerHTML = `
     <div class="page">
       <button class="btn btn-ghost back-btn" onclick="navigate('library');push('#/')">← Library</button>
@@ -313,18 +344,21 @@ function renderBook(progData) {
           <div class="hero-badge">${statusBadge(b.status)}</div>
           <h1 class="hero-title">${esc(b.title)}</h1>
           ${b.author ? `<div class="hero-author">${esc(b.author)}</div>` : ''}
-          <div class="hero-meta">${b.total} chapters · ${totalWords.toLocaleString()} words</div>
+          <div class="hero-meta">${b.total} chapters · ${totalWords.toLocaleString()} words · ${totalTime} listening</div>
           ${genControls}
+          <div style="margin-top:12px">
+            <button id="share-btn" class="btn btn-ghost" style="font-size:13px;padding:7px 16px" onclick="shareBook()">Share</button>
+          </div>
         </div>
       </div>
       <div class="section-label">Chapters</div>
       <div class="chapters">${chapRows}</div>
       ${skippedNote}
       <div class="danger-zone">
-        <button class="btn btn-danger" onclick="confirmDelete()">Delete Book</button>
+        <button class="btn btn-danger" onclick="confirmDelete()">Remove from Library</button>
         <span id="del-confirm" style="display:none">
-          <span style="color:var(--muted);font-size:14px">Are you sure?</span>
-          <button class="btn" style="background:var(--danger);color:#fff;padding:7px 16px;margin-left:10px" onclick="doDelete()">Yes, Delete</button>
+          <span style="color:var(--muted);font-size:14px">Remove this audiobook for everyone?</span>
+          <button class="btn" style="background:var(--danger);color:#fff;padding:7px 16px;margin-left:10px" onclick="doDelete()">Yes, Remove</button>
           <button class="btn btn-ghost" style="margin-left:6px" onclick="document.getElementById('del-confirm').style.display='none'">Cancel</button>
         </span>
       </div>
@@ -346,7 +380,6 @@ async function startGen() {
   await loadBook(state.book.id);
 }
 
-// Poll the progress endpoint. Do cheap DOM updates for stats; full re-render only when new chapters become ready or current-chapter changes.
 let lastProg = {};
 function startPoll(id) {
   clearInterval(state.pollTimer);
@@ -360,7 +393,6 @@ function startPoll(id) {
       return;
     }
 
-    // Fast path: update the generating-card stats in place
     const pct = prog.total ? Math.round(prog.done / prog.total * 100) : 0;
     const fill = document.getElementById('gen-fill');
     const pctEl = document.getElementById('gen-pct');
@@ -371,14 +403,12 @@ function startPoll(id) {
     if (etaEl) etaEl.textContent = prog.eta ? fmtEta(prog.eta) + ' remaining' : '';
     if (subEl && prog.current) subEl.textContent = `Chapter ${prog.done + 1} of ${prog.total} — ${prog.current}`;
 
-    // Full re-render only if readable chapter set changed (new chapter ready) or current chapter changed
     const fresh = await api('GET', `/api/books/${id}`).catch(() => null);
     if (!fresh || state.page !== 'book' || state.bookId !== id) return;
     const prevReady = state.book?.chapters.filter(c => c.status === 'complete' && c.audio).length || 0;
     const newReady = fresh.chapters.filter(c => c.status === 'complete' && c.audio).length;
     state.book = fresh;
 
-    // Keep player's chapter queue in sync so new chapters auto-queue
     if (state.player && state.player.book.id === id) {
       state.player.chapters = fresh.chapters.filter(c => c.status === 'complete' && c.audio);
       state.player.book = fresh;
@@ -394,7 +424,6 @@ function startPoll(id) {
 
 // ── Player ────────────────────────────────────────────────────────────────────
 function playChapter(chapterId) {
-  // Always look up the chapter fresh — no stale indices
   const ch = state.book.chapters.find(c => c.id === chapterId);
   if (!ch || !ch.audio) return;
   const ready = state.book.chapters.filter(c => c.status === 'complete' && c.audio);
@@ -555,19 +584,19 @@ function renderChapPanel() {
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
-const playIcon  = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
-const pauseIcon = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
-const prevIcon  = () => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`;
-const nextIcon  = () => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2.5-6 5.5 3.9V8.1L8.5 12zM16 6h2v12h-2z"/></svg>`;
-const skip30Icon = (d) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+const playIcon    = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+const pauseIcon   = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+const prevIcon    = () => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`;
+const nextIcon    = () => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2.5-6 5.5 3.9V8.1L8.5 12zM16 6h2v12h-2z"/></svg>`;
+const skip30Icon  = (d) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
   ${d === '−'
     ? '<path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>'
     : '<path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2z"/>'}
   <text x="8" y="15.5" font-size="5" fill="currentColor" font-family="Inter,sans-serif" font-weight="700">30</text>
 </svg>`;
-const listIcon = () => `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
-const spinnerLarge = () => `<svg class="spin" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10" /></svg>`;
-const spinnerSmall = () => `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10" /></svg>`;
+const listIcon    = () => `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
+const spinnerLarge = () => `<svg class="spin" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10"/></svg>`;
+const spinnerSmall = () => `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10"/></svg>`;
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function esc(s) {
