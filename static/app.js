@@ -83,45 +83,34 @@ async function renderLibrary() {
 
   const hasBooks = books.length > 0;
 
-  const hero = hasBooks
-    ? `<div class="landing-hero">
-        <h1>Listen to any book, free.</h1>
-       </div>`
-    : `<div class="landing-hero">
-        <h1>Listen to any book, free.</h1>
-        <p>Upload any PDF ebook and it becomes a free audiobook for everyone.<br>No sign-up. No cost.</p>
-       </div>
-       <div class="how">
-         <div class="how-step">
-           <div class="how-num">01</div>
-           <div class="how-title">Upload a PDF</div>
-           <div class="how-desc">Drop any ebook PDF. We extract the text and split it into chapters automatically.</div>
-         </div>
-         <div class="how-step">
-           <div class="how-num">02</div>
-           <div class="how-title">Narrated automatically</div>
-           <div class="how-desc">Each chapter is read aloud using a high-quality neural voice. Takes a few minutes per book.</div>
-         </div>
-         <div class="how-step">
-           <div class="how-num">03</div>
-           <div class="how-title">Free for everyone</div>
-           <div class="how-desc">The audiobook lives in the shared library — anyone can stream it, free, forever.</div>
-         </div>
-       </div>
-       <button class="btn btn-primary" onclick="openUpload()">Upload the First Book</button>`;
-
-  const libSection = hasBooks
-    ? `<div class="lib-head">
-        <span class="lib-title">Library</span>
-        ${stats.books > 0 ? `<span class="lib-meta">${stats.books} book${stats.books !== 1 ? 's' : ''} · ${stats.hours}+ hrs of audio</span>` : ''}
-       </div>
-       <div class="grid">${books.map(bookCard).join('')}</div>`
-    : '';
+  if (!hasBooks) {
+    document.getElementById('app').innerHTML = `
+      <div class="page">
+        <div class="landing-split">
+          <div class="landing-text">
+            <h1>Listen to any book, free.</h1>
+            <p>Upload any PDF ebook — we narrate it automatically and share it with everyone. No sign-up. No cost.</p>
+            <button class="btn btn-primary" onclick="openUpload()">Upload a Book</button>
+          </div>
+          <div class="landing-shelf" aria-hidden="true">
+            ${shelfTile('Pride and Prejudice','Jane Austen','Novel')}
+            ${shelfTile('Sherlock Holmes','Arthur Conan Doyle','Mystery')}
+            ${shelfTile('The Art of War','Sun Tzu','Classic')}
+            ${shelfTile('Frankenstein','Mary Shelley','Gothic')}
+            ${shelfTile('Meditations','Marcus Aurelius','Philosophy')}
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
 
   document.getElementById('app').innerHTML = `
-    <div class="page" style="padding-top:0">
-      ${hero}
-      ${libSection}
+    <div class="page">
+      <div class="lib-head">
+        <h1 class="lib-h1">Library</h1>
+        ${stats.books > 0 ? `<span class="lib-meta">${stats.books} book${stats.books !== 1 ? 's' : ''} · ${stats.hours}+ hrs of audio</span>` : ''}
+      </div>
+      <div class="grid">${books.map(bookCard).join('')}</div>
     </div>`;
 
   if (books.some(b => b.status === 'generating')) {
@@ -139,6 +128,16 @@ async function renderLibrary() {
       }
     }, 2500);
   }
+}
+
+function shelfTile(title, author, kicker) {
+  return `<div class="tile">
+    <div class="tile-top">${esc(kicker)}</div>
+    <div class="tile-bottom">
+      <div class="tile-title">${esc(title)}</div>
+      <div class="tile-author">${esc(author)}</div>
+    </div>
+  </div>`;
 }
 
 function bookCard(b) {

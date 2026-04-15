@@ -9,7 +9,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:9px}
 
 /* Layout */
-#app{min-height:100vh;padding-bottom:120px}
+#app{min-height:100vh;padding-top:62px;padding-bottom:120px}
 .page{max-width:1200px;margin:0 auto;padding:36px 24px}
 
 /* Buttons */
@@ -170,36 +170,55 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
 .chap-panel-item.active{color:var(--accent);font-weight:700}
 
 /* ── Freedible ────────────────────────────────────────────────────────────── */
-.site-header{position:sticky;top:0;z-index:100;background:rgba(14,14,24,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.site-header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(14,14,24,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid var(--border)}
 .site-header-inner{max-width:1200px;margin:0 auto;padding:0 24px;height:62px;display:flex;align-items:center;justify-content:space-between}
 .wordmark{font-size:21px;font-weight:800;letter-spacing:-.6px;color:var(--text);cursor:pointer;user-select:none}
 
-/* Landing */
-.landing-hero{padding:68px 0 0}
-.landing-hero h1{font-size:clamp(28px,4.5vw,50px);font-weight:800;letter-spacing:-1.5px;line-height:1.1;margin-bottom:12px}
-.landing-hero p{color:var(--muted);font-size:16px;line-height:1.65;max-width:500px;margin-bottom:0}
+/* Landing (empty state) */
+.landing-split{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:center;min-height:480px;padding:32px 0 56px}
+.landing-text h1{font-size:clamp(32px,4.8vw,54px);font-weight:800;letter-spacing:-1.6px;line-height:1.08;margin-bottom:18px}
+.landing-text p{color:var(--muted);font-size:17px;line-height:1.6;margin-bottom:28px;max-width:440px}
+.landing-text .btn-primary{padding:13px 28px;font-size:15px}
 
-/* Library section header */
-.lib-head{display:flex;align-items:center;justify-content:space-between;margin:44px 0 18px}
-.lib-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
-.lib-meta{font-size:12px;color:var(--muted)}
+.landing-shelf{position:relative;height:460px}
+.tile{position:absolute;width:152px;height:224px;border-radius:6px;box-shadow:0 16px 42px rgba(0,0,0,.5),0 2px 0 rgba(255,255,255,.04) inset;display:flex;flex-direction:column;justify-content:space-between;padding:18px 16px;color:rgba(255,255,255,.96);overflow:hidden;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+.tile::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.08) 0%,transparent 30%,transparent 60%,rgba(0,0,0,.35) 100%);pointer-events:none}
+.tile-top{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:.55;position:relative}
+.tile-bottom{position:relative}
+.tile-title{font-size:15.5px;font-weight:700;letter-spacing:-.3px;line-height:1.18;margin-bottom:6px}
+.tile-author{font-size:11px;opacity:.78;letter-spacing:.4px;text-transform:uppercase}
+.tile:nth-child(1){top:0;left:0;transform:rotate(-5deg);background:linear-gradient(150deg,#3f2a5a 0%,#241638 100%)}
+.tile:nth-child(2){top:14px;left:158px;transform:rotate(3deg);background:linear-gradient(150deg,#5a3820 0%,#2e1c0e 100%)}
+.tile:nth-child(3){top:4px;left:308px;transform:rotate(-2deg);background:linear-gradient(150deg,#1f4250 0%,#0d2128 100%)}
+.tile:nth-child(4){top:210px;left:58px;transform:rotate(4deg);background:linear-gradient(150deg,#5a2530 0%,#2c1016 100%)}
+.tile:nth-child(5){top:222px;left:218px;transform:rotate(-3deg);background:linear-gradient(150deg,#265a3e 0%,#122c1f 100%)}
+.landing-shelf:hover .tile{transform:rotate(0) translateY(-2px)}
+.landing-shelf:hover .tile:nth-child(1){left:-10px}
+.landing-shelf:hover .tile:nth-child(3){left:318px}
+.landing-shelf:hover .tile:nth-child(4){top:220px;left:48px}
+.landing-shelf:hover .tile:nth-child(5){top:232px;left:228px}
+
+/* Library page header */
+.lib-head{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 24px;gap:16px;flex-wrap:wrap}
+.lib-h1{font-size:28px;font-weight:800;letter-spacing:-.7px}
+.lib-meta{font-size:13px;color:var(--muted)}
 
 /* Book card play overlay */
-.play-ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.48);opacity:0;transition:opacity .18s;border-radius:var(--r-sm)}
+.play-ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);opacity:0;transition:opacity .18s;border-radius:var(--r-sm)}
 .book-card:hover .play-ov{opacity:1}
-.play-ov-btn{width:50px;height:50px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 4px 24px rgba(0,0,0,.45);transition:transform .15s}
-.book-card:hover .play-ov-btn{transform:scale(1.06)}
+.play-ov-btn{width:52px;height:52px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.5);transition:transform .15s}
+.book-card:hover .play-ov-btn{transform:scale(1.08)}
 
-/* How it works (empty state) */
-.how{display:flex;gap:0;margin:44px 0 40px;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
-.how-step{flex:1;padding:28px 26px;background:var(--card)}
-.how-step+.how-step{border-left:1px solid var(--border)}
-.how-num{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
-.how-title{font-weight:700;font-size:15px;margin-bottom:6px}
-.how-desc{color:var(--muted);font-size:13px;line-height:1.6}
-
-@media(max-width:600px){
-  .how{flex-direction:column}
-  .how-step+.how-step{border-left:none;border-top:1px solid var(--border)}
-  .landing-hero h1{letter-spacing:-.8px}
+@media(max-width:900px){
+  .landing-split{grid-template-columns:1fr;gap:40px;padding-bottom:40px}
+  .landing-shelf{height:300px;max-width:460px;margin:0 auto}
+  .tile{width:130px;height:195px}
+  .tile:nth-child(1){top:0;left:20px}
+  .tile:nth-child(2){top:10px;left:150px}
+  .tile:nth-child(3){top:0;left:280px}
+  .tile:nth-child(4){top:110px;left:60px}
+  .tile:nth-child(5){top:115px;left:200px}
+}
+@media(max-width:520px){
+  .landing-shelf{display:none}
 }
