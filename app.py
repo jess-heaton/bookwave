@@ -58,29 +58,52 @@ async def init_db():
 async def startup(): await init_db()
 
 # ── PDF helpers ───────────────────────────────────────────────────────────────
-CHAP = re.compile(
-    r"^(chapter|part|book|section|prologue|epilogue|introduction|preface|afterword)"
-    r"(\s+(\d+|[ivxlcdm]+|[a-z\-]+))?\s*[:\-–—]?\s*(.*)$", re.IGNORECASE)
+# Numbered chapter: "Chapter 1", "Part II", "Book Three", "Section 2"
+CHAP_NUMBERED = re.compile(
+    r"^(chapter|part|book|section)\s+"
+    r"(\d+|[ivxlcdm]{1,8}|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)"
+    r"(?:\s*[:\-–—.]\s*(.{0,80}))?\s*$",
+    re.IGNORECASE,
+)
+# Standalone section: "Prologue", "Introduction", etc.
+CHAP_WORD = re.compile(
+    r"^(prologue|epilogue|introduction|preface|afterword|foreword|acknowledgments?)"
+    r"(?:\s*[:\-–—.]\s*(.{0,80}))?\s*$",
+    re.IGNORECASE,
+)
+
+def _match_chapter(line):
+    s = line.strip()
+    if not s or len(s) > 120:
+        return None
+    m = CHAP_NUMBERED.match(s)
+    if m:
+        kind, num, rest = m.group(1).title(), m.group(2), m.group(3)
+        title = f"{kind} {num}"
+        if rest: title += f" — {rest.strip()}"
+        return title
+    m = CHAP_WORD.match(s)
+    if m:
+        word, rest = m.group(1).title(), m.group(2)
+        return f"{word} — {rest.strip()}" if rest else word
+    return None
 
 def split_chapters(text):
     lines, chapters = text.split("\n"), []
     title, buf, found = "Beginning", [], False
     for line in lines:
-        s = line.strip()
-        m = CHAP.match(s) if s and len(s) < 120 else None
-        if m:
+        t = _match_chapter(line)
+        if t:
             body = "\n".join(buf).strip()
-            if len(body) > 80:
+            if len(body.split()) >= 40:  # skip tiny fragments
                 chapters.append({"title": title, "text": body})
                 found = True
-            parts = [m.group(1).title()]
-            if m.group(3): parts.append(m.group(3))
-            if m.group(4): parts.append(m.group(4).strip())
-            title, buf = " ".join(parts), []
+            title, buf = t, []
         else:
             buf.append(line)
     body = "\n".join(buf).strip()
-    if len(body) > 80:
+    if len(body.split()) >= 40:
         chapters.append({"title": title, "text": body})
     if not found or len(chapters) == 1:
         words = text.split()
@@ -213,7 +236,10 @@ async def tts_chapter(chapter_id, text, voice):
 
 async def generate_book(book_id, voice_id):
     print(f"\n[GEN] Starting book {book_id}")
-    progress[book_id] = {"done": 0, "total": 0, "status": "generating"}
+    progress[book_id] = {
+        "done": 0, "total": 0, "status": "generating",
+        "current": "", "started": time.time(),
+    }
 
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
@@ -225,6 +251,7 @@ async def generate_book(book_id, voice_id):
 
     for ch in chapters:
         cid, ctitle = ch["id"], ch["title"]
+        progress[book_id]["current"] = ctitle
         print(f"[GEN] {ctitle} ...", end=" ", flush=True)
 
         async with aiosqlite.connect(DB) as db:
@@ -344,13 +371,19 @@ async def generate(bid: str, background_tasks: BackgroundTasks, voice: str = "af
 @app.get("/api/books/{bid}/progress")
 async def get_progress(bid: str):
     if bid in progress:
-        return progress[bid]
+        p = progress[bid]
+        eta = None
+        if p.get("done", 0) > 0 and p.get("started"):
+            elapsed = time.time() - p["started"]
+            per_ch = elapsed / p["done"]
+            eta = int(per_ch * (p["total"] - p["done"]))
+        return {**p, "eta": eta}
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT status,total,done FROM books WHERE id=?", (bid,)) as c:
             b = await c.fetchone()
     if not b: raise HTTPException(404)
-    return {"status": b["status"], "done": b["done"], "total": b["total"]}
+    return {"status": b["status"], "done": b["done"], "total": b["total"], "current": "", "eta": None}
 
 @app.delete("/api/books/{bid}")
 async def delete_book(bid: str):

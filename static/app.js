@@ -1,14 +1,17 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
-  page: 'library',      // 'library' | 'book'
+  page: 'library',
   books: [],
-  book: null,           // current book detail
-  player: null,         // { book, chapters, idx }
+  book: null,
+  player: null,         // { book, chapters, chapterId }
   pollTimer: null,
+  bookId: null,
 };
 
 const audio = new Audio();
+audio.preload = 'auto';
 let audioPlaying = false;
+let audioLoading = false;
 let showChapPanel = false;
 let draggingSeek = false;
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -17,6 +20,7 @@ let speedIdx = 1;
 // ── Router ────────────────────────────────────────────────────────────────────
 function navigate(page, id) {
   clearInterval(state.pollTimer);
+  state.pollTimer = null;
   state.page = page;
   state.bookId = id || null;
   if (page === 'library') renderLibrary();
@@ -29,9 +33,7 @@ window.addEventListener('popstate', () => {
   else navigate('library');
 });
 
-function push(hash) {
-  history.pushState({}, '', hash);
-}
+function push(hash) { history.pushState({}, '', hash); }
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function api(method, path, body) {
@@ -49,6 +51,13 @@ function fmt(s) {
   const m = Math.floor(s / 60), sec = Math.floor(s % 60);
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
+function fmtEta(sec) {
+  if (!sec || sec < 0) return '';
+  if (sec < 60) return `~${sec}s`;
+  if (sec < 3600) return `~${Math.round(sec/60)} min`;
+  const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
+  return `~${h}h ${m}m`;
+}
 function wordTime(w) {
   const m = Math.round(w / 150);
   return m < 60 ? `~${m}m` : `~${Math.floor(m/60)}h ${m%60}m`;
@@ -60,11 +69,6 @@ function statusBadge(s) {
     complete:   '<span class="badge b-green">Ready</span>',
     error:      '<span class="badge b-red">Error</span>',
   }[s] || `<span class="badge b-blue">${s}</span>`;
-}
-function cover(src, ph='📖', cls='') {
-  return src
-    ? `<img src="${src}" alt="" loading="lazy" class="${cls}"/>`
-    : `<div class="hero-cover-ph ${cls}">${ph}</div>`;
 }
 
 // ── Library ───────────────────────────────────────────────────────────────────
@@ -97,7 +101,6 @@ async function renderLibrary() {
       ${grid}
     </div>`;
 
-  // Poll if any book is generating
   if (books.some(b => b.status === 'generating')) {
     state.pollTimer = setInterval(async () => {
       const fresh = await api('GET', '/api/books').catch(() => null);
@@ -107,7 +110,10 @@ async function renderLibrary() {
         const gridEl = document.querySelector('.grid');
         if (gridEl) gridEl.innerHTML = fresh.map(bookCard).join('');
       }
-      if (!fresh.some(b => b.status === 'generating')) clearInterval(state.pollTimer);
+      if (!fresh.some(b => b.status === 'generating')) {
+        clearInterval(state.pollTimer);
+        state.pollTimer = null;
+      }
     }, 2500);
   }
 }
@@ -116,7 +122,7 @@ function bookCard(b) {
   const pct = b.total ? Math.round(b.done / b.total * 100) : 0;
   const progBar = b.status === 'generating'
     ? `<div class="prog-track" style="margin-top:8px"><div class="prog-fill" style="width:${pct}%"></div></div>
-       <div style="color:var(--muted);font-size:11px;margin-top:3px">${pct}%</div>` : '';
+       <div style="color:var(--muted);font-size:11px;margin-top:3px">${pct}% · ${b.done}/${b.total}</div>` : '';
   const img = b.cover
     ? `<img src="${b.cover}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
     : `<div class="book-cover-placeholder">📖</div>`;
@@ -132,7 +138,6 @@ function bookCard(b) {
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 let uploadFile = null;
-
 function openUpload() {
   uploadFile = null;
   document.getElementById('app').insertAdjacentHTML('beforeend', `
@@ -158,30 +163,24 @@ function openUpload() {
       </div>
     </div>`);
 }
-
 function closeUploadIfBg(e) { if (e.target.id === 'upload-overlay') closeUpload(); }
 function closeUpload() { document.getElementById('upload-overlay')?.remove(); }
-
 function dzDrag(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('dragover'); }
 function dzLeave(e) { document.getElementById('drop-zone').classList.remove('dragover'); }
 function dzDrop(e) {
-  e.preventDefault();
-  dzLeave(e);
+  e.preventDefault(); dzLeave(e);
   const f = e.dataTransfer.files[0];
   if (f) fileChosen(f);
 }
-
 function fileChosen(f) {
   if (!f || !f.name.endsWith('.pdf')) return;
   uploadFile = f;
   const dz = document.getElementById('drop-zone');
-  dz.classList.add('has-file');
-  dz.classList.remove('dragover');
+  dz.classList.add('has-file'); dz.classList.remove('dragover');
   document.getElementById('drop-title').textContent = f.name;
   document.getElementById('drop-sub').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB';
   document.getElementById('upload-btn').disabled = false;
 }
-
 async function doUpload() {
   if (!uploadFile) return;
   const btn = document.getElementById('upload-btn');
@@ -209,16 +208,26 @@ async function loadBook(id) {
   if (book.status === 'generating') startPoll(id);
 }
 
-// Voices loaded dynamically from /api/voices (real Windows voices)
 let _voices = [];
 async function loadVoices() {
   try { _voices = await api('GET', '/api/voices'); } catch(e) { _voices = []; }
 }
 loadVoices();
 
-function renderBook() {
+// Filter chapters into two buckets: readable (has audio or still pending) and skipped (done but no audio — boilerplate)
+function splitChapters(b) {
+  const readable = [], skipped = [];
+  for (const c of b.chapters) {
+    if (c.status === 'complete' && !c.audio) skipped.push(c);
+    else readable.push(c);
+  }
+  return { readable, skipped };
+}
+
+function renderBook(progData) {
   const b = state.book;
-  const ready = b.chapters.filter(c => c.status === 'complete' && c.audio);
+  const { readable, skipped } = splitChapters(b);
+  const ready = readable.filter(c => c.status === 'complete' && c.audio);
   const totalWords = b.chapters.reduce((a, c) => a + (c.words || 0), 0);
   const pct = b.total ? Math.round(b.done / b.total * 100) : 0;
   const curVoice = b.voice || '';
@@ -227,48 +236,59 @@ function renderBook() {
     ? _voices.map(v => `<option value="${esc(v.id)}"${v.id === curVoice ? ' selected' : ''}>${esc(v.name)}</option>`).join('')
     : `<option value="">Default Voice</option>`;
 
+  const firstReadyId = ready[0]?.id;
+
   const genControls = (() => {
     if (b.status === 'uploaded' || b.status === 'complete' || b.status === 'error') {
       return `<div class="voice-row">
         <select class="voice-select" id="voice-sel">${voiceOptions}</select>
         <button class="btn btn-primary" onclick="startGen()">🎙 ${b.status === 'complete' ? 'Re-generate' : 'Generate Audiobook'}</button>
-        ${ready.length > 0 ? `<button class="btn btn-primary" onclick="playFrom(0)" style="background:var(--success)">▶ Play</button>` : ''}
+        ${firstReadyId ? `<button class="btn btn-primary" onclick="playChapter('${firstReadyId}')" style="background:var(--success)">▶ Play</button>` : ''}
       </div>`;
     }
     if (b.status === 'generating') {
-      const playBtn = ready.length > 0
-        ? `<button class="btn btn-primary" onclick="playFrom(0)" style="background:var(--success);margin-top:10px">▶ Play ${ready.length} ready chapter${ready.length !== 1 ? 's' : ''}</button>`
-        : '';
-      return `<div class="gen-progress">
-        <div class="gen-label">Generating chapter ${b.done} of ${b.total}…</div>
-        <div class="prog-track"><div class="prog-fill" id="gen-fill" style="width:${pct}%"></div></div>
-        <div class="gen-pct" id="gen-pct">${pct}%</div>
-        ${playBtn}
+      const currentChapter = progData?.current || '';
+      const etaStr = progData?.eta ? fmtEta(progData.eta) : '';
+      return `<div class="gen-card">
+        <div class="gen-head">
+          <div class="gen-pulse"></div>
+          <div class="gen-head-text">
+            <div class="gen-head-title">Generating Audiobook</div>
+            <div class="gen-head-sub" id="gen-sub">Chapter ${b.done + 1} of ${b.total}${currentChapter ? ' — ' + esc(currentChapter) : ''}</div>
+          </div>
+        </div>
+        <div class="prog-track gen-track"><div class="prog-fill" id="gen-fill" style="width:${pct}%"></div></div>
+        <div class="gen-stats">
+          <span id="gen-pct">${pct}% complete</span>
+          ${etaStr ? `<span id="gen-eta">${etaStr} remaining</span>` : '<span id="gen-eta"></span>'}
+        </div>
+        ${firstReadyId ? `<button class="btn btn-primary gen-play-btn" onclick="playChapter('${firstReadyId}')">▶ Start listening · ${ready.length} ready</button>` : '<div class="gen-hint">Playback will be available as soon as the first chapter is ready.</div>'}
       </div>`;
     }
     return '';
   })();
 
-  const chapRows = b.chapters.map((ch, i) => {
+  const chapRows = readable.map(ch => {
     const isReady = ch.status === 'complete' && ch.audio;
-    const readyIdx = ready.findIndex(r => r.id === ch.id);
-    const isActive = state.player && state.player.book.id === b.id &&
-                     ready[state.player.idx]?.id === ch.id;
+    const isGenerating = progData?.current && progData.current === ch.title && ch.status === 'pending';
+    const isActive = state.player && state.player.book.id === b.id && state.player.chapterId === ch.id;
     const cls = [
       'chap-row',
       isReady ? 'clickable' : 'dimmed',
-      isActive ? 'active' : ''
+      isActive ? 'active' : '',
+      isGenerating ? 'generating-now' : '',
     ].filter(Boolean).join(' ');
     const num = isActive
-      ? `<div class="chap-num playing">♪</div>`
-      : `<div class="chap-num">${isReady ? '▶' : '…'}</div>`;
-    const badge = {
-      complete:   '<span class="badge b-green">Ready</span>',
-      generating: '<span class="badge b-orange">…</span>',
-      pending:    '<span class="badge b-blue">Pending</span>',
-      error:      '<span class="badge b-red">Error</span>',
-    }[ch.status] || '';
-    return `<div class="${cls}" ${isReady ? `onclick="playFrom(${readyIdx})"` : ''}>
+      ? `<div class="chap-num playing">${audioLoading ? spinnerSmall() : '♪'}</div>`
+      : `<div class="chap-num">${isReady ? '▶' : (isGenerating ? spinnerSmall() : '…')}</div>`;
+    const badge = isGenerating
+      ? '<span class="badge b-orange">Generating…</span>'
+      : {
+          complete:   '<span class="badge b-green">Ready</span>',
+          pending:    '<span class="badge b-blue">Pending</span>',
+          error:      '<span class="badge b-red">Error</span>',
+        }[ch.status] || '';
+    return `<div class="${cls}" ${isReady ? `onclick="playChapter('${ch.id}')"` : ''}>
       ${num}
       <div class="chap-body">
         <div class="chap-title${isActive ? ' active-text' : ''}">${esc(ch.title)}</div>
@@ -277,6 +297,10 @@ function renderBook() {
       ${badge}
     </div>`;
   }).join('');
+
+  const skippedNote = skipped.length
+    ? `<div class="skipped-note">${skipped.length} page${skipped.length !== 1 ? 's' : ''} skipped (copyright / front matter)</div>`
+    : '';
 
   document.getElementById('app').innerHTML = `
     <div class="page">
@@ -295,6 +319,7 @@ function renderBook() {
       </div>
       <div class="section-label">Chapters</div>
       <div class="chapters">${chapRows}</div>
+      ${skippedNote}
       <div class="danger-zone">
         <button class="btn btn-danger" onclick="confirmDelete()">Delete Book</button>
         <span id="del-confirm" style="display:none">
@@ -321,54 +346,86 @@ async function startGen() {
   await loadBook(state.book.id);
 }
 
+// Poll the progress endpoint. Do cheap DOM updates for stats; full re-render only when new chapters become ready or current-chapter changes.
+let lastProg = {};
 function startPoll(id) {
   clearInterval(state.pollTimer);
   state.pollTimer = setInterval(async () => {
     const prog = await api('GET', `/api/books/${id}/progress`).catch(() => null);
     if (!prog) return;
-    // Update progress bar if visible
-    const fill = document.getElementById('gen-fill');
-    const pctEl = document.getElementById('gen-pct');
-    const pct = prog.total ? Math.round(prog.done / prog.total * 100) : 0;
-    if (fill) fill.style.width = pct + '%';
-    if (pctEl) pctEl.textContent = pct + '%';
     if (prog.status === 'complete' || prog.status === 'error') {
       clearInterval(state.pollTimer);
+      state.pollTimer = null;
       await loadBook(id);
-    } else {
-      // Re-render so newly-completed chapters become playable mid-generation
-      const fresh = await api('GET', `/api/books/${id}`).catch(() => null);
-      if (fresh && state.page === 'book' && state.bookId === id) {
-        const prevReady = state.book?.chapters.filter(c => c.status === 'complete').length || 0;
-        state.book = fresh;
-        const newReady = fresh.chapters.filter(c => c.status === 'complete' && c.audio).length;
-        if (newReady !== prevReady) renderBook();
-      }
+      return;
+    }
+
+    // Fast path: update the generating-card stats in place
+    const pct = prog.total ? Math.round(prog.done / prog.total * 100) : 0;
+    const fill = document.getElementById('gen-fill');
+    const pctEl = document.getElementById('gen-pct');
+    const etaEl = document.getElementById('gen-eta');
+    const subEl = document.getElementById('gen-sub');
+    if (fill) fill.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '% complete';
+    if (etaEl) etaEl.textContent = prog.eta ? fmtEta(prog.eta) + ' remaining' : '';
+    if (subEl && prog.current) subEl.textContent = `Chapter ${prog.done + 1} of ${prog.total} — ${prog.current}`;
+
+    // Full re-render only if readable chapter set changed (new chapter ready) or current chapter changed
+    const fresh = await api('GET', `/api/books/${id}`).catch(() => null);
+    if (!fresh || state.page !== 'book' || state.bookId !== id) return;
+    const prevReady = state.book?.chapters.filter(c => c.status === 'complete' && c.audio).length || 0;
+    const newReady = fresh.chapters.filter(c => c.status === 'complete' && c.audio).length;
+    state.book = fresh;
+
+    // Keep player's chapter queue in sync so new chapters auto-queue
+    if (state.player && state.player.book.id === id) {
+      state.player.chapters = fresh.chapters.filter(c => c.status === 'complete' && c.audio);
+      state.player.book = fresh;
+    }
+
+    const currentChanged = (lastProg.current || '') !== (prog.current || '');
+    if (newReady !== prevReady || currentChanged) {
+      lastProg = prog;
+      renderBook(prog);
     }
   }, 2000);
 }
 
-function playFrom(idx) {
-  const ready = state.book.chapters.filter(c => c.status === 'complete');
-  if (!ready.length) return;
-  state.player = { book: state.book, chapters: ready, idx };
-  playIdx(idx);
+// ── Player ────────────────────────────────────────────────────────────────────
+function playChapter(chapterId) {
+  // Always look up the chapter fresh — no stale indices
+  const ch = state.book.chapters.find(c => c.id === chapterId);
+  if (!ch || !ch.audio) return;
+  const ready = state.book.chapters.filter(c => c.status === 'complete' && c.audio);
+  state.player = { book: state.book, chapters: ready, chapterId };
+  loadAndPlay(ch);
   renderPlayerBar();
-  if (state.page === 'book') renderBook();
+  if (state.page === 'book') renderBook(lastProg);
 }
 
-// ── Audio player ──────────────────────────────────────────────────────────────
-function playIdx(idx) {
-  const { chapters } = state.player;
-  if (idx < 0 || idx >= chapters.length) return;
-  state.player.idx = idx;
-  audio.src = chapters[idx].audio;
+function currentPlayerChapter() {
+  if (!state.player) return null;
+  return state.player.chapters.find(c => c.id === state.player.chapterId) || null;
+}
+
+function loadAndPlay(ch) {
+  audioLoading = true;
+  updatePlayBtn();
+  audio.src = ch.audio;
   audio.playbackRate = SPEEDS[speedIdx];
   audio.load();
-  audio.play().then(() => { audioPlaying = true; updatePlayBtn(); }).catch(() => {});
+  audio.play().catch(() => {});
   updatePlayerInfo();
 }
 
+audio.addEventListener('loadstart',  () => { audioLoading = true;  updatePlayBtn(); });
+audio.addEventListener('waiting',    () => { audioLoading = true;  updatePlayBtn(); });
+audio.addEventListener('canplay',    () => { audioLoading = false; updatePlayBtn(); });
+audio.addEventListener('playing',    () => { audioLoading = false; audioPlaying = true; updatePlayBtn(); });
+audio.addEventListener('play',       () => { audioPlaying = true;  updatePlayBtn(); });
+audio.addEventListener('pause',      () => { audioPlaying = false; updatePlayBtn(); });
+audio.addEventListener('error',      () => { audioLoading = false; updatePlayBtn(); });
 audio.addEventListener('timeupdate', () => {
   if (draggingSeek) return;
   const pct = audio.duration ? audio.currentTime / audio.duration * 100 : 0;
@@ -377,27 +434,35 @@ audio.addEventListener('timeupdate', () => {
   if (fill) fill.style.width = pct + '%';
   if (time) time.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
 });
-audio.addEventListener('play',  () => { audioPlaying = true;  updatePlayBtn(); });
-audio.addEventListener('pause', () => { audioPlaying = false; updatePlayBtn(); });
 audio.addEventListener('ended', () => {
-  const { chapters, idx } = state.player;
-  if (idx + 1 < chapters.length) playIdx(idx + 1);
-  else audioPlaying = false;
+  if (!state.player) return;
+  const idx = state.player.chapters.findIndex(c => c.id === state.player.chapterId);
+  const next = state.player.chapters[idx + 1];
+  if (next) {
+    state.player.chapterId = next.id;
+    loadAndPlay(next);
+    renderPlayerBar();
+    if (state.page === 'book') renderBook(lastProg);
+  } else {
+    audioPlaying = false; updatePlayBtn();
+  }
 });
 
 function updatePlayBtn() {
   const btn = document.getElementById('play-btn');
-  if (btn) btn.innerHTML = audioPlaying ? pauseIcon() : playIcon();
+  if (!btn) return;
+  btn.innerHTML = audioLoading ? spinnerLarge() : (audioPlaying ? pauseIcon() : playIcon());
 }
 function updatePlayerInfo() {
-  const ch = state.player.chapters[state.player.idx];
+  const ch = currentPlayerChapter();
   const el = document.getElementById('player-chap');
   if (el) el.textContent = ch?.title || '';
 }
 
 function renderPlayerBar() {
-  const { book, chapters, idx } = state.player;
-  const ch = chapters[idx];
+  const ch = currentPlayerChapter();
+  if (!ch) return;
+  const { book } = state.player;
   const playerEl = document.getElementById('player');
   playerEl.classList.remove('hidden');
   playerEl.innerHTML = `
@@ -416,21 +481,11 @@ function renderPlayerBar() {
       </div>
       <div class="player-controls">
         <div class="ctrl-row">
-          <button class="ibtn" id="prev-btn" onclick="playerPrev()" title="Previous chapter">
-            ${prevIcon()}
-          </button>
-          <button class="ibtn" onclick="audio.currentTime=Math.max(0,audio.currentTime-30)" title="−30s">
-            ${skip30Icon('−')}
-          </button>
-          <button class="ibtn-lg" id="play-btn" onclick="togglePlay()">
-            ${audioPlaying ? pauseIcon() : playIcon()}
-          </button>
-          <button class="ibtn" onclick="audio.currentTime=Math.min(audio.duration||0,audio.currentTime+30)" title="+30s">
-            ${skip30Icon('+')}
-          </button>
-          <button class="ibtn" id="next-btn" onclick="playerNext()" title="Next chapter">
-            ${nextIcon()}
-          </button>
+          <button class="ibtn" id="prev-btn" onclick="playerPrev()" title="Previous chapter">${prevIcon()}</button>
+          <button class="ibtn" onclick="audio.currentTime=Math.max(0,audio.currentTime-30)" title="−30s">${skip30Icon('−')}</button>
+          <button class="ibtn-lg" id="play-btn" onclick="togglePlay()">${audioLoading ? spinnerLarge() : (audioPlaying ? pauseIcon() : playIcon())}</button>
+          <button class="ibtn" onclick="audio.currentTime=Math.min(audio.duration||0,audio.currentTime+30)" title="+30s">${skip30Icon('+')}</button>
+          <button class="ibtn" id="next-btn" onclick="playerNext()" title="Next chapter">${nextIcon()}</button>
         </div>
         <div class="player-time" id="player-time">0:00 / 0:00</div>
       </div>
@@ -438,16 +493,12 @@ function renderPlayerBar() {
         <button class="speed-btn" onclick="cycleSpeed()">${SPEEDS[speedIdx]}×</button>
         <div class="vol-row">
           🔉
-          <input type="range" min="0" max="1" step="0.05" value="${audio.volume}"
-                 style="width:70px" onchange="audio.volume=+this.value"/>
+          <input type="range" min="0" max="1" step="0.05" value="${audio.volume}" style="width:70px" onchange="audio.volume=+this.value"/>
         </div>
-        <button class="ibtn clist-btn${showChapPanel?' active':''}" onclick="toggleChapPanel()" title="Chapters">
-          ${listIcon()}
-        </button>
+        <button class="ibtn clist-btn${showChapPanel?' active':''}" onclick="toggleChapPanel()" title="Chapters">${listIcon()}</button>
       </div>
     </div>`;
 
-  // Seek interaction
   const track = document.getElementById('seek-track');
   const seekTo = (e) => {
     const r = track.getBoundingClientRect();
@@ -465,10 +516,16 @@ function togglePlay() {
   if (audioPlaying) audio.pause(); else audio.play();
 }
 function playerPrev() {
-  if (state.player.idx > 0) playIdx(state.player.idx - 1);
+  if (!state.player) return;
+  const idx = state.player.chapters.findIndex(c => c.id === state.player.chapterId);
+  const prev = state.player.chapters[idx - 1];
+  if (prev) playChapter(prev.id);
 }
 function playerNext() {
-  if (state.player.idx < state.player.chapters.length - 1) playIdx(state.player.idx + 1);
+  if (!state.player) return;
+  const idx = state.player.chapters.findIndex(c => c.id === state.player.chapterId);
+  const next = state.player.chapters[idx + 1];
+  if (next) playChapter(next.id);
 }
 function cycleSpeed() {
   speedIdx = (speedIdx + 1) % SPEEDS.length;
@@ -477,35 +534,27 @@ function cycleSpeed() {
 }
 function toggleChapPanel() {
   showChapPanel = !showChapPanel;
-  const existing = document.getElementById('chap-panel');
-  if (existing) { existing.remove(); }
-  const btn = document.querySelector('.clist-btn');
-  if (btn) btn.classList.toggle('active', showChapPanel);
+  document.getElementById('chap-panel')?.remove();
+  document.querySelector('.clist-btn')?.classList.toggle('active', showChapPanel);
   if (showChapPanel) renderChapPanel();
 }
 function renderChapPanel() {
-  const { chapters, idx } = state.player;
+  const { chapters, chapterId } = state.player;
   const panel = document.createElement('div');
   panel.id = 'chap-panel';
   panel.className = 'chap-panel';
   panel.innerHTML = `
     <div class="chap-panel-head">Chapters</div>
     <div class="chap-panel-list">
-      ${chapters.map((ch, i) => `
-        <div class="chap-panel-item${i === idx ? ' active' : ''}" onclick="jumpChap(${i})">
+      ${chapters.map(ch => `
+        <div class="chap-panel-item${ch.id === chapterId ? ' active' : ''}" onclick="playChapter('${ch.id}');toggleChapPanel()">
           ${esc(ch.title)}
         </div>`).join('')}
     </div>`;
   document.body.appendChild(panel);
 }
-function jumpChap(i) {
-  playIdx(i);
-  renderPlayerBar();
-  toggleChapPanel();
-  if (state.page === 'book') renderBook();
-}
 
-// ── Icons (inline SVG) ────────────────────────────────────────────────────────
+// ── Icons ─────────────────────────────────────────────────────────────────────
 const playIcon  = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
 const pauseIcon = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 const prevIcon  = () => `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>`;
@@ -517,6 +566,8 @@ const skip30Icon = (d) => `<svg width="15" height="15" viewBox="0 0 24 24" fill=
   <text x="8" y="15.5" font-size="5" fill="currentColor" font-family="Inter,sans-serif" font-weight="700">30</text>
 </svg>`;
 const listIcon = () => `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
+const spinnerLarge = () => `<svg class="spin" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10" /></svg>`;
+const spinnerSmall = () => `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10" /></svg>`;
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function esc(s) {

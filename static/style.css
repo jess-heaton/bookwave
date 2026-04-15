@@ -92,9 +92,25 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .hero-meta{color:var(--muted);font-size:13px;margin-bottom:24px}
 .voice-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
 select.voice-select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:99px;padding:9px 16px;font:14px 'Inter',sans-serif;cursor:pointer;outline:none}
-.gen-progress{max-width:320px}
-.gen-label{color:var(--muted);font-size:13px;margin-bottom:7px}
-.gen-pct{color:var(--accent);font-size:12px;font-weight:700;margin-top:5px}
+/* Generating card */
+.gen-card{background:linear-gradient(135deg,rgba(241,123,42,.12),rgba(255,179,71,.05));border:1px solid rgba(241,123,42,.35);border-radius:var(--r);padding:18px 20px;max-width:460px;margin-top:4px}
+.gen-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.gen-pulse{width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(241,123,42,.7);animation:pulse 1.8s infinite;flex-shrink:0}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(241,123,42,.7)}70%{box-shadow:0 0 0 12px rgba(241,123,42,0)}100%{box-shadow:0 0 0 0 rgba(241,123,42,0)}}
+.gen-head-text{min-width:0;flex:1}
+.gen-head-title{font-weight:700;font-size:15px}
+.gen-head-sub{color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gen-track{height:6px;margin-bottom:8px}
+.gen-stats{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px}
+#gen-pct{color:var(--accent);font-weight:700}
+.gen-play-btn{background:var(--success)!important;width:100%;justify-content:center}
+.gen-play-btn:hover{background:#5bc497!important}
+.gen-hint{color:var(--muted);font-size:12px;font-style:italic}
+.skipped-note{color:var(--muted);font-size:12px;text-align:center;margin-top:12px;font-style:italic}
+
+/* Spinner */
+.spin{animation:spin .9s linear infinite;transform-origin:center}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 
 /* Chapter list */
 .section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px}
@@ -103,6 +119,8 @@ select.voice-select{background:var(--card);color:var(--text);border:1px solid va
 .chap-row.clickable{cursor:pointer}
 .chap-row.clickable:hover{background:var(--card-hover)}
 .chap-row.active{background:rgba(241,123,42,.12);border-color:var(--accent)}
+.chap-row.generating-now{border-color:var(--accent);background:rgba(241,123,42,.06)}
+.chap-row.generating-now .chap-title{color:var(--accent)}
 .chap-row.dimmed{opacity:.5}
 .chap-num{width:28px;text-align:center;color:var(--muted);font-size:12px;flex-shrink:0}
 .chap-num.playing{color:var(--accent);font-size:15px}
