@@ -18,8 +18,16 @@ from fastapi.staticfiles import StaticFiles
 # Override with env var BOOKWAVE_STORAGE=C:\path\to\storage
 BASE   = Path(__file__).parent
 STATIC = BASE / "static"
-_default_store = Path(os.environ.get("LOCALAPPDATA", str(BASE))) / "Bookwave"
-STORE  = Path(os.environ.get("BOOKWAVE_STORAGE", str(_default_store)))
+# Storage priority: explicit env -> Railway persistent volume -> Windows LOCALAPPDATA -> repo dir
+if os.environ.get("BOOKWAVE_STORAGE"):
+    _default_store = Path(os.environ["BOOKWAVE_STORAGE"])
+elif Path("/data").exists() and os.access("/data", os.W_OK):
+    _default_store = Path("/data/Bookwave")
+elif os.environ.get("LOCALAPPDATA"):
+    _default_store = Path(os.environ["LOCALAPPDATA"]) / "Bookwave"
+else:
+    _default_store = BASE / "Bookwave"
+STORE  = _default_store
 COVERS = STORE / "covers"
 AUDIO  = STORE / "audio"
 UPLOADS= STORE / "uploads"

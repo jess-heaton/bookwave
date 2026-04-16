@@ -41,7 +41,11 @@ async function api(method, path, body) {
   if (body instanceof FormData) opts.body = body;
   else if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   const r = await fetch(path, opts);
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) {
+    const err = new Error(await r.text());
+    err.status = r.status;
+    throw err;
+  }
   return r.json();
 }
 
@@ -400,7 +404,14 @@ let lastProg = {};
 function startPoll(id) {
   clearInterval(state.pollTimer);
   state.pollTimer = setInterval(async () => {
-    const prog = await api('GET', `/api/books/${id}/progress`).catch(() => null);
+    const prog = await api('GET', `/api/books/${id}/progress`).catch(e => {
+      if (e && e.status === 404) {
+        clearInterval(state.pollTimer);
+        state.pollTimer = null;
+        navigate('library'); push('#/');
+      }
+      return null;
+    });
     if (!prog) return;
     if (prog.status === 'complete' || prog.status === 'error') {
       clearInterval(state.pollTimer);
