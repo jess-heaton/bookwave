@@ -222,3 +222,28 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
 @media(max-width:520px){
   .landing-shelf{display:none}
 }
+
+@media(max-width:768px){
+  .site-header-inner{padding:0 16px}
+  .wordmark{font-size:20px}
+  .lib-h1{font-size:22px}
+  .landing-text h1{font-size:36px;line-height:1.1}
+  .landing-text p{font-size:15px}
+  .player{padding:10px 12px;gap:10px}
+  .player-right{display:none}
+  .player-info{min-width:0;max-width:44%}
+  .player-chap{font-size:13px}
+  .player-book{font-size:11px}
+  .hero{flex-direction:column;align-items:flex-start;gap:22px}
+  .hero-cover{width:170px;height:256px}
+  .hero-title{font-size:26px}
+  .chap-row{padding:12px}
+  .chap-title{font-size:14px}
+  .book-card{font-size:13px}
+}
+@media(max-width:420px){
+  .landing-text h1{font-size:30px}
+  .btn-primary{padding:9px 14px;font-size:13px}
+  .voice-row{flex-direction:column;align-items:stretch}
+  .voice-row .btn{width:100%}
+}

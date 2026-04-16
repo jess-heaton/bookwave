@@ -377,7 +377,16 @@ function confirmDelete() {
   document.getElementById('del-confirm').style.alignItems = 'center';
 }
 async function doDelete() {
-  await api('DELETE', `/api/books/${state.book.id}`);
+  const deletedId = state.book.id;
+  if (state.player && state.player.book.id === deletedId) {
+    try { audio.pause(); } catch {}
+    audio.removeAttribute('src');
+    audio.load();
+    state.player = null;
+    const pl = document.getElementById('player');
+    if (pl) pl.classList.add('hidden');
+  }
+  await api('DELETE', `/api/books/${deletedId}`);
   navigate('library'); push('#/');
 }
 
@@ -424,7 +433,9 @@ function startPoll(id) {
     const currentChanged = (lastProg.current || '') !== (prog.current || '');
     if (newReady !== prevReady || currentChanged) {
       lastProg = prog;
+      const scrollY = window.scrollY;
       renderBook(prog);
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
     }
   }, 2000);
 }

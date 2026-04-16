@@ -178,6 +178,22 @@ def scrub_text(text: str) -> str:
     text = re.sub(r'[^\S\n]+', ' ', text).strip()
     return text
 
+def reflow_for_tts(text: str) -> str:
+    """PDFs have a hard \\n at every visual line — TTS treats each as a pause.
+    Join wrapped lines into running prose so Kokoro only pauses on real punctuation."""
+    # Dehyphenate words split across lines: "exam-\nple" -> "example"
+    text = re.sub(r'(\w)-\n(\w)', r'\1\2', text)
+    # Preserve paragraph breaks as a single sentinel, then collapse single newlines
+    text = re.sub(r'\n{2,}', ' \x00 ', text)
+    text = text.replace('\n', ' ')
+    # If paragraph didn't end on terminal punctuation, add a period so the
+    # next sentence has a natural boundary instead of a long silence.
+    text = re.sub(r'([^.!?:;"\')\]])\s*\x00\s*', r'\1. ', text)
+    text = text.replace('\x00', ' ')
+    # Tidy whitespace
+    text = re.sub(r'\s{2,}', ' ', text).strip()
+    return text
+
 def _run_kokoro_modal(text: str, voice: str, out_path: str):
     print("[TTS] Calling Modal GPU…", flush=True)
     t0 = time.time()
@@ -215,6 +231,7 @@ async def tts_chapter(chapter_id, text, voice):
         return None
 
     text = scrub_text(text)
+    text = reflow_for_tts(text)
     if len(text.split()) < 20:
         return None
 
@@ -297,16 +314,31 @@ async def generate_book(book_id, voice_id):
 @app.get("/")
 async def root(): return FileResponse(str(STATIC / "index.html"))
 
+MAX_PDF_BYTES = 40 * 1024 * 1024  # 40 MB
+MIN_PDF_BYTES = 2 * 1024           # 2 KB
+BLOCKED_TERMS = {
+    "xxx", "pornography", "porn ", "explicit sex", "erotica",
+    "child abuse", "cp ", "csam", "bestiality", "incest",
+}
+
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "PDF only")
+    data = await file.read()
+    if len(data) > MAX_PDF_BYTES:
+        raise HTTPException(413, f"PDF too large (max {MAX_PDF_BYTES // (1024*1024)} MB)")
+    if len(data) < MIN_PDF_BYTES:
+        raise HTTPException(400, "PDF too small or empty")
+    if not data[:5] == b"%PDF-":
+        raise HTTPException(400, "Not a valid PDF file")
     bid = str(uuid.uuid4())
     pdf_path = UPLOADS / f"{bid}.pdf"
-    pdf_path.write_bytes(await file.read())
+    pdf_path.write_bytes(data)
     try:
         doc = fitz.open(str(pdf_path))
     except:
+        pdf_path.unlink(missing_ok=True)
         raise HTTPException(400, "Cannot read PDF")
     # Cover
     page = doc[0]
@@ -324,6 +356,12 @@ async def upload(file: UploadFile = File(...)):
     # Text + chapters
     full = "\n".join(p.get_text() for p in doc)
     doc.close()
+    low = full.lower()
+    hits = sum(1 for t in BLOCKED_TERMS if t in low)
+    if hits >= 2 or any(t in low for t in ("csam", "child abuse", "bestiality")):
+        pdf_path.unlink(missing_ok=True)
+        cover_file.unlink(missing_ok=True)
+        raise HTTPException(400, "Content not permitted on Freedible")
     chapters = split_chapters(full)
     async with aiosqlite.connect(DB) as db:
         await db.execute("INSERT INTO books VALUES (?,?,?,?,?,?,?,?,?)",
