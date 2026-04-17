@@ -146,11 +146,11 @@ async function renderLibrary() {
         ${heroCTA}
       </div>
       <div class="landing-shelf" aria-hidden="true">
-        ${shelfTile('Pride and Prejudice','Jane Austen','Novel','https://covers.openlibrary.org/b/olid/OL66550W-L.jpg')}
-        ${shelfTile('Sherlock Holmes','Arthur Conan Doyle','Mystery','https://covers.openlibrary.org/b/olid/OL27516W-L.jpg')}
-        ${shelfTile('The Art of War','Sun Tzu','Classic','https://covers.openlibrary.org/b/olid/OL8193949W-L.jpg')}
-        ${shelfTile('Frankenstein','Mary Shelley','Gothic','https://covers.openlibrary.org/b/olid/OL2068538W-L.jpg')}
-        ${shelfTile('Meditations','Marcus Aurelius','Philosophy','https://covers.openlibrary.org/b/olid/OL5676456W-L.jpg')}
+        ${shelfTile('Pride and Prejudice','Jane Austen','Novel','/static/covers/pride.png')}
+        ${shelfTile('Wuthering Heights','Emily Brontë','Classic','/static/covers/wuthering.png')}
+        ${shelfTile('The Art of War','Sun Tzu','Strategy','/static/covers/artofwar.jpg')}
+        ${shelfTile('The Great Gatsby','F. Scott Fitzgerald','Fiction','/static/covers/gatsby.png')}
+        ${shelfTile('Meditations','Marcus Aurelius','Philosophy','/static/covers/meditations.png')}
       </div>
     </div>`;
 
