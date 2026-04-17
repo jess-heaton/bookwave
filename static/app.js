@@ -142,15 +142,15 @@ async function renderLibrary() {
     <div class="landing-split">
       <div class="landing-text">
         <h1>Listen to any book, free.</h1>
-        <p>Upload a PDF you own — we'll narrate it for you privately. Or browse community-shared audiobooks in the public domain.</p>
+        <p>Upload any PDF you own and we'll narrate it privately, just for you. Or browse the community library of public domain classics shared by listeners.</p>
         ${heroCTA}
       </div>
       <div class="landing-shelf" aria-hidden="true">
-        ${shelfTile('Pride and Prejudice','Jane Austen','Novel')}
-        ${shelfTile('Sherlock Holmes','Arthur Conan Doyle','Mystery')}
-        ${shelfTile('The Art of War','Sun Tzu','Classic')}
-        ${shelfTile('Frankenstein','Mary Shelley','Gothic')}
-        ${shelfTile('Meditations','Marcus Aurelius','Philosophy')}
+        ${shelfTile('Pride and Prejudice','Jane Austen','Novel','https://covers.openlibrary.org/b/olid/OL66550W-L.jpg')}
+        ${shelfTile('Sherlock Holmes','Arthur Conan Doyle','Mystery','https://covers.openlibrary.org/b/olid/OL27516W-L.jpg')}
+        ${shelfTile('The Art of War','Sun Tzu','Classic','https://covers.openlibrary.org/b/olid/OL8193949W-L.jpg')}
+        ${shelfTile('Frankenstein','Mary Shelley','Gothic','https://covers.openlibrary.org/b/olid/OL2068538W-L.jpg')}
+        ${shelfTile('Meditations','Marcus Aurelius','Philosophy','https://covers.openlibrary.org/b/olid/OL5676456W-L.jpg')}
       </div>
     </div>`;
 
@@ -203,8 +203,12 @@ async function renderLibrary() {
   }
 }
 
-function shelfTile(title, author, kicker) {
+function shelfTile(title, author, kicker, coverUrl) {
+  const cover = coverUrl
+    ? `<img class="tile-cover" src="${coverUrl}" alt="${esc(title)}" loading="lazy" onerror="this.style.display='none'"/>`
+    : '';
   return `<div class="tile">
+    ${cover}
     <div class="tile-top">${esc(kicker)}</div>
     <div class="tile-bottom">
       <div class="tile-title">${esc(title)}</div>
