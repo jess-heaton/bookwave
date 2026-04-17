@@ -202,6 +202,34 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
 .lib-head{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 24px;gap:16px;flex-wrap:wrap}
 .lib-h1{font-size:28px;font-weight:800;letter-spacing:-.7px}
 .lib-meta{font-size:13px;color:var(--muted)}
+.lib-section{margin-top:56px}
+.empty-state{color:var(--muted);font-size:14px;padding:32px 0;text-align:center;border:1px dashed var(--border);border-radius:10px}
+
+/* Header right cluster: sign-in / user menu */
+.header-right{display:flex;align-items:center;gap:12px;position:relative}
+.user-menu{position:relative;cursor:pointer}
+.user-avatar{width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;border:1px solid var(--border);transition:transform .15s}
+.user-avatar img{width:100%;height:100%;object-fit:cover}
+.user-menu:hover .user-avatar{transform:scale(1.05)}
+.user-dropdown{position:absolute;top:calc(100% + 10px);right:0;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;min-width:220px;padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.5);opacity:0;pointer-events:none;transform:translateY(-4px);transition:opacity .15s,transform .15s;z-index:120}
+.user-dropdown.open{opacity:1;pointer-events:auto;transform:translateY(0)}
+.user-dd-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px}
+.user-dd-email{font-size:12px;color:var(--muted)}
+.user-dd-sep{height:1px;background:var(--border);margin:10px 0}
+.user-dd-item{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);font-size:13px;padding:8px 10px;border-radius:6px;cursor:pointer}
+.user-dd-item:hover{background:var(--bg-3,rgba(255,255,255,.05))}
+
+/* Visibility badge on book cards */
+.vis-badge{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.7);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.5px;text-transform:uppercase;backdrop-filter:blur(6px)}
+
+/* Admin reports modal */
+.admin-list{display:flex;flex-direction:column;gap:12px;max-height:60vh;overflow-y:auto;margin-top:12px}
+.admin-row{display:flex;justify-content:space-between;gap:14px;padding:14px;border:1px solid var(--border);border-radius:8px;align-items:flex-start}
+.admin-row-title{font-weight:600;font-size:14px;margin-bottom:4px}
+.admin-row-meta{font-size:11px;color:var(--muted);margin-bottom:8px}
+.admin-row-reason{font-size:13px;color:var(--text);white-space:pre-wrap}
+.admin-status-open{color:var(--danger);font-weight:600}
+.admin-status-resolved{color:var(--success);font-weight:600}
 
 /* Book card play overlay */
 .play-ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);opacity:0;transition:opacity .18s;border-radius:var(--r-sm)}

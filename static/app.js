@@ -6,7 +6,55 @@ const state = {
   player: null,         // { book, chapters, chapterId }
   pollTimer: null,
   bookId: null,
+  user: null,
 };
+
+async function loadUser() {
+  try {
+    const r = await api('GET', '/api/auth/me');
+    state.user = r.user || null;
+  } catch { state.user = null; }
+  renderHeader();
+}
+function signIn()  { location.href = '/api/auth/google'; }
+async function signOut() {
+  try { await api('POST', '/api/auth/logout'); } catch {}
+  state.user = null;
+  navigate('library'); push('#/');
+  renderHeader();
+}
+
+function renderHeader() {
+  const right = document.getElementById('header-right');
+  if (!right) return;
+  if (state.user) {
+    const initial = (state.user.name || state.user.email || '?').trim().charAt(0).toUpperCase();
+    const img = state.user.picture
+      ? `<img src="${state.user.picture}" alt="" referrerpolicy="no-referrer"/>`
+      : `<span>${initial}</span>`;
+    right.innerHTML = `
+      <button class="btn btn-primary" onclick="openUpload()">Add a Book</button>
+      <div class="user-menu" onclick="toggleUserMenu(event)">
+        <div class="user-avatar">${img}</div>
+        <div class="user-dropdown" id="user-dropdown">
+          <div class="user-dd-name">${esc(state.user.name || '')}</div>
+          <div class="user-dd-email">${esc(state.user.email || '')}</div>
+          <div class="user-dd-sep"></div>
+          <button class="user-dd-item" onclick="signOut()">Sign out</button>
+          ${state.user.is_admin ? '<button class="user-dd-item" onclick="openAdmin()">Admin · Reports</button>' : ''}
+        </div>
+      </div>`;
+  } else {
+    right.innerHTML = `<button class="btn btn-primary" onclick="signIn()">Sign in</button>`;
+  }
+}
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  document.getElementById('user-dropdown')?.classList.toggle('open');
+}
+document.addEventListener('click', () => {
+  document.getElementById('user-dropdown')?.classList.remove('open');
+});
 
 const audio = new Audio();
 audio.preload = 'auto';
@@ -79,54 +127,75 @@ function statusBadge(s) {
 async function renderLibrary() {
   document.title = 'Freedible — Listen to any book, free';
 
-  const [books, stats] = await Promise.all([
-    api('GET', '/api/books').catch(() => []),
+  const [publicBooks, myBooks, stats] = await Promise.all([
+    api('GET', '/api/books?scope=public').catch(() => []),
+    state.user ? api('GET', '/api/books?scope=mine').catch(() => []) : Promise.resolve([]),
     api('GET', '/api/stats').catch(() => ({ books: 0, hours: 0 })),
   ]);
-  state.books = books;
+  state.books = [...publicBooks, ...myBooks.filter(b => !publicBooks.some(p => p.id === b.id))];
 
-  const hasBooks = books.length > 0;
+  const heroCTA = state.user
+    ? `<button class="btn btn-primary" onclick="openUpload()">Upload a Book</button>`
+    : `<button class="btn btn-primary" onclick="signIn()">Sign in to upload</button>`;
 
-  if (!hasBooks) {
-    document.getElementById('app').innerHTML = `
-      <div class="page">
-        <div class="landing-split">
-          <div class="landing-text">
-            <h1>Listen to any book, free.</h1>
-            <p>Upload any PDF ebook — we narrate it automatically and share it with everyone. No sign-up. No cost.</p>
-            <button class="btn btn-primary" onclick="openUpload()">Upload a Book</button>
-          </div>
-          <div class="landing-shelf" aria-hidden="true">
-            ${shelfTile('Pride and Prejudice','Jane Austen','Novel')}
-            ${shelfTile('Sherlock Holmes','Arthur Conan Doyle','Mystery')}
-            ${shelfTile('The Art of War','Sun Tzu','Classic')}
-            ${shelfTile('Frankenstein','Mary Shelley','Gothic')}
-            ${shelfTile('Meditations','Marcus Aurelius','Philosophy')}
-          </div>
-        </div>
-      </div>`;
-    return;
-  }
+  const hero = `
+    <div class="landing-split">
+      <div class="landing-text">
+        <h1>Listen to any book, free.</h1>
+        <p>Upload a PDF you own — we'll narrate it for you privately. Or browse community-shared audiobooks in the public domain.</p>
+        ${heroCTA}
+      </div>
+      <div class="landing-shelf" aria-hidden="true">
+        ${shelfTile('Pride and Prejudice','Jane Austen','Novel')}
+        ${shelfTile('Sherlock Holmes','Arthur Conan Doyle','Mystery')}
+        ${shelfTile('The Art of War','Sun Tzu','Classic')}
+        ${shelfTile('Frankenstein','Mary Shelley','Gothic')}
+        ${shelfTile('Meditations','Marcus Aurelius','Philosophy')}
+      </div>
+    </div>`;
+
+  const mineSection = state.user && myBooks.length ? `
+    <section class="lib-section">
+      <div class="lib-head">
+        <h2 class="lib-h1">Your Books</h2>
+        <span class="lib-meta">${myBooks.length} book${myBooks.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="grid" id="grid-mine">${myBooks.map(bookCard).join('')}</div>
+    </section>` : '';
+
+  const communitySection = `
+    <section class="lib-section">
+      <div class="lib-head">
+        <h2 class="lib-h1">Community Library</h2>
+        ${stats.books > 0 ? `<span class="lib-meta">${stats.books} book${stats.books !== 1 ? 's' : ''} · ${stats.hours}+ hrs of audio</span>` : ''}
+      </div>
+      ${publicBooks.length
+        ? `<div class="grid" id="grid-public">${publicBooks.map(bookCard).join('')}</div>`
+        : `<div class="empty-state">No public books yet. ${state.user ? 'Be the first to share one.' : 'Sign in to upload.'}</div>`}
+    </section>`;
 
   document.getElementById('app').innerHTML = `
     <div class="page">
-      <div class="lib-head">
-        <h1 class="lib-h1">Library</h1>
-        ${stats.books > 0 ? `<span class="lib-meta">${stats.books} book${stats.books !== 1 ? 's' : ''} · ${stats.hours}+ hrs of audio</span>` : ''}
-      </div>
-      <div class="grid">${books.map(bookCard).join('')}</div>
+      ${hero}
+      ${mineSection}
+      ${communitySection}
     </div>`;
 
-  if (books.some(b => b.status === 'generating')) {
+  if (state.books.some(b => b.status === 'generating')) {
     state.pollTimer = setInterval(async () => {
-      const fresh = await api('GET', '/api/books').catch(() => null);
-      if (!fresh) return;
-      state.books = fresh;
+      const [fp, fm] = await Promise.all([
+        api('GET', '/api/books?scope=public').catch(() => null),
+        state.user ? api('GET', '/api/books?scope=mine').catch(() => null) : Promise.resolve([]),
+      ]);
+      if (!fp) return;
+      state.books = [...fp, ...(fm || []).filter(b => !fp.some(p => p.id === b.id))];
       if (state.page === 'library') {
-        const gridEl = document.querySelector('.grid');
-        if (gridEl) gridEl.innerHTML = fresh.map(bookCard).join('');
+        const pub = document.getElementById('grid-public');
+        const mine = document.getElementById('grid-mine');
+        if (pub) pub.innerHTML = fp.map(bookCard).join('');
+        if (mine && fm) mine.innerHTML = fm.map(bookCard).join('');
       }
-      if (!fresh.some(b => b.status === 'generating')) {
+      if (!state.books.some(b => b.status === 'generating')) {
         clearInterval(state.pollTimer);
         state.pollTimer = null;
       }
@@ -154,9 +223,11 @@ function bookCard(b) {
     : `<div class="book-cover-placeholder">${bookSvg(38)}</div>`;
   const overlay = b.status === 'complete'
     ? `<div class="play-ov"><div class="play-ov-btn">${playIcon()}</div></div>` : '';
+  const visBadge = b.visibility === 'private'
+    ? `<div class="vis-badge" title="Private — only you can see this">Private</div>` : '';
   return `
     <div class="book-card" onclick="navigate('book','${b.id}');push('#/book/${b.id}')">
-      <div class="book-cover">${img}${overlay}<div class="cover-badge">${statusBadge(b.status)}</div></div>
+      <div class="book-cover">${img}${overlay}<div class="cover-badge">${statusBadge(b.status)}</div>${visBadge}</div>
       <div class="book-title">${esc(b.title)}</div>
       ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
       ${progBar}
@@ -166,6 +237,7 @@ function bookCard(b) {
 // ── Upload ────────────────────────────────────────────────────────────────────
 let uploadFile = null;
 function openUpload() {
+  if (!state.user) { signIn(); return; }
   uploadFile = null;
   document.getElementById('app').insertAdjacentHTML('beforeend', `
     <div class="overlay" id="upload-overlay" onclick="closeUploadIfBg(event)">
@@ -175,7 +247,7 @@ function openUpload() {
           <button class="ibtn" onclick="closeUpload()">${closeIcon()}</button>
         </div>
         <div class="modal-note">
-          Once added, this audiobook will be visible to everyone in the community library.
+          Your upload is <strong>private by default</strong> — only you can see it. You can choose to share it with the community later if it's public domain or yours to share.
         </div>
         <div class="drop-zone" id="drop-zone"
              ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event)"
@@ -184,23 +256,14 @@ function openUpload() {
           <div class="drop-title" id="drop-title">Drop your PDF here</div>
           <div class="drop-sub" id="drop-sub">or click to browse · PDF only</div>
         </div>
-        <label class="legal-check" id="legal-label">
-          <input type="checkbox" id="legal-cb" onchange="legalChanged()"/>
-          <span>I confirm this book is in the public domain, freely available online, or I have permission to share it.</span>
-        </label>
         <div class="error-msg" id="upload-err" style="display:none"></div>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeUpload()">Cancel</button>
-          <button class="btn btn-primary" id="upload-btn" onclick="doUpload()" disabled>Add to Library</button>
+          <button class="btn btn-primary" id="upload-btn" onclick="doUpload()" disabled>Add Privately</button>
         </div>
         <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="fileChosen(this.files[0])"/>
       </div>
     </div>`);
-}
-function legalChanged() {
-  const cb = document.getElementById('legal-cb');
-  const btn = document.getElementById('upload-btn');
-  btn.disabled = !(cb.checked && uploadFile);
 }
 function closeUploadIfBg(e) { if (e.target.id === 'upload-overlay') closeUpload(); }
 function closeUpload() { document.getElementById('upload-overlay')?.remove(); }
@@ -218,8 +281,7 @@ function fileChosen(f) {
   dz.classList.add('has-file'); dz.classList.remove('dragover');
   document.getElementById('drop-title').textContent = f.name;
   document.getElementById('drop-sub').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB';
-  const cb = document.getElementById('legal-cb');
-  document.getElementById('upload-btn').disabled = !(cb && cb.checked);
+  document.getElementById('upload-btn').disabled = false;
 }
 async function doUpload() {
   if (!uploadFile) return;
@@ -228,13 +290,13 @@ async function doUpload() {
   document.getElementById('upload-err').style.display = 'none';
   try {
     const fd = new FormData(); fd.append('file', uploadFile);
-    await api('POST', '/api/upload', fd);
+    const r = await api('POST', '/api/upload', fd);
     closeUpload();
-    navigate('library');
+    navigate('book', r.id); push('#/book/' + r.id);
   } catch(e) {
     const el = document.getElementById('upload-err');
     el.textContent = e.message || 'Upload failed'; el.style.display = '';
-    btn.disabled = false; btn.textContent = 'Add to Library';
+    btn.disabled = false; btn.textContent = 'Add Privately';
   }
 }
 
@@ -269,6 +331,73 @@ function shareBook() {
     const btn = document.getElementById('share-btn');
     if (btn) { btn.textContent = 'Link copied'; setTimeout(() => { btn.textContent = 'Share'; }, 2000); }
   });
+}
+
+async function publishBook(makePublic) {
+  if (makePublic) {
+    const ok = confirm(
+      "Publish to the Community Library?\n\n" +
+      "By publishing, you confirm either:\n" +
+      "  • This book is in the public domain, OR\n" +
+      "  • You own the copyright / have permission to share it.\n\n" +
+      "Anyone can listen once published. Freedible will remove books reported as infringing."
+    );
+    if (!ok) return;
+  }
+  const fd = new FormData();
+  fd.append('visibility', makePublic ? 'public' : 'private');
+  fd.append('attest', makePublic ? 'true' : 'false');
+  try {
+    await api('POST', `/api/books/${state.book.id}/publish`, fd);
+    await loadBook(state.book.id);
+  } catch (e) {
+    alert(e.message || 'Failed to update visibility');
+  }
+}
+
+async function reportBook() {
+  const reason = prompt("Why are you reporting this book? (copyright, harmful content, etc.)");
+  if (reason === null) return;
+  try {
+    const fd = new FormData(); fd.append('reason', reason || '');
+    await api('POST', `/api/books/${state.book.id}/report`, fd);
+    alert("Thanks — we'll review this shortly.");
+  } catch (e) {
+    alert(e.message || 'Failed to submit report');
+  }
+}
+
+async function openAdmin() {
+  try {
+    const reports = await api('GET', '/api/admin/reports');
+    const rows = reports.length
+      ? reports.map(r => `
+          <div class="admin-row">
+            <div>
+              <div class="admin-row-title">${esc(r.book_title || '(deleted)')}</div>
+              <div class="admin-row-meta">${esc(r.reporter_email || 'anonymous')} · ${new Date(r.created*1000).toLocaleString()} · <span class="admin-status-${r.status}">${r.status}</span></div>
+              <div class="admin-row-reason">${esc(r.reason || '')}</div>
+            </div>
+            <button class="btn btn-danger" onclick="takedown('${r.book_id}')">Make Private</button>
+          </div>`).join('')
+      : '<div class="empty-state">No reports.</div>';
+    document.getElementById('app').insertAdjacentHTML('beforeend', `
+      <div class="overlay" id="admin-overlay" onclick="if(event.target.id==='admin-overlay')this.remove()">
+        <div class="modal" style="max-width:720px">
+          <div class="modal-header"><h2>Reports</h2><button class="ibtn" onclick="document.getElementById('admin-overlay').remove()">${closeIcon()}</button></div>
+          <div class="admin-list">${rows}</div>
+        </div>
+      </div>`);
+  } catch (e) { alert(e.message); }
+}
+
+async function takedown(bid) {
+  if (!confirm('Make this book private (removed from public library)?')) return;
+  try {
+    await api('POST', `/api/admin/takedown/${bid}`);
+    document.getElementById('admin-overlay')?.remove();
+    openAdmin();
+  } catch (e) { alert(e.message); }
 }
 
 function renderBook(progData) {
@@ -344,6 +473,33 @@ function renderBook(progData) {
 
   const totalTime = wordTime(totalWords);
 
+  const isOwner = !!b.is_owner;
+  const isAdmin = state.user && state.user.is_admin;
+  const visBadgeLabel = b.visibility === 'public' ? 'Public' : 'Private';
+  const visBadgeCls = b.visibility === 'public' ? 'b-green' : 'b-blue';
+
+  const ownerActions = isOwner ? (
+    b.visibility === 'public'
+      ? `<button class="btn btn-ghost" style="font-size:13px;padding:7px 16px" onclick="publishBook(false)">Make Private</button>`
+      : `<button class="btn" style="font-size:13px;padding:7px 16px;background:var(--accent);color:#fff" onclick="publishBook(true)">Publish to Community</button>`
+  ) : '';
+
+  const reportAction = (!isOwner && b.visibility === 'public' && state.user)
+    ? `<button class="btn btn-ghost" style="font-size:13px;padding:7px 16px;color:var(--danger)" onclick="reportBook()">Report</button>` : '';
+
+  const shareAction = b.visibility === 'public'
+    ? `<button id="share-btn" class="btn btn-ghost" style="font-size:13px;padding:7px 16px" onclick="shareBook()">Share</button>` : '';
+
+  const dangerZone = (isOwner || isAdmin) ? `
+      <div class="danger-zone">
+        <button class="btn btn-danger" onclick="confirmDelete()">${isOwner ? 'Delete Book' : 'Admin Delete'}</button>
+        <span id="del-confirm" style="display:none">
+          <span style="color:var(--muted);font-size:14px">Delete permanently?</span>
+          <button class="btn" style="background:var(--danger);color:#fff;padding:7px 16px;margin-left:10px" onclick="doDelete()">Yes, Delete</button>
+          <button class="btn btn-ghost" style="margin-left:6px" onclick="document.getElementById('del-confirm').style.display='none'">Cancel</button>
+        </span>
+      </div>` : '';
+
   document.getElementById('app').innerHTML = `
     <div class="page">
       <button class="btn btn-ghost back-btn" onclick="navigate('library');push('#/')">← Library</button>
@@ -352,27 +508,25 @@ function renderBook(progData) {
           ${b.cover ? `<img src="${b.cover}" alt=""/>` : `<div class="hero-cover-ph">${bookSvg(52)}</div>`}
         </div>
         <div class="hero-info">
-          <div class="hero-badge">${statusBadge(b.status)}</div>
+          <div class="hero-badge">
+            ${statusBadge(b.status)}
+            <span class="badge ${visBadgeCls}" style="margin-left:6px">${visBadgeLabel}</span>
+          </div>
           <h1 class="hero-title">${esc(b.title)}</h1>
           ${b.author ? `<div class="hero-author">${esc(b.author)}</div>` : ''}
           <div class="hero-meta">${b.total} chapters · ${totalWords.toLocaleString()} words · ${totalTime} listening</div>
-          ${genControls}
-          <div style="margin-top:12px">
-            <button id="share-btn" class="btn btn-ghost" style="font-size:13px;padding:7px 16px" onclick="shareBook()">Share</button>
+          ${isOwner ? genControls : ''}
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            ${shareAction}
+            ${ownerActions}
+            ${reportAction}
           </div>
         </div>
       </div>
       <div class="section-label">Chapters</div>
       <div class="chapters">${chapRows}</div>
       ${skippedNote}
-      <div class="danger-zone">
-        <button class="btn btn-danger" onclick="confirmDelete()">Remove from Library</button>
-        <span id="del-confirm" style="display:none">
-          <span style="color:var(--muted);font-size:14px">Remove this audiobook for everyone?</span>
-          <button class="btn" style="background:var(--danger);color:#fff;padding:7px 16px;margin-left:10px" onclick="doDelete()">Yes, Remove</button>
-          <button class="btn btn-ghost" style="margin-left:6px" onclick="document.getElementById('del-confirm').style.display='none'">Cancel</button>
-        </span>
-      </div>
+      ${dangerZone}
     </div>`;
 }
 
@@ -638,6 +792,9 @@ function esc(s) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-const m = location.hash.match(/^#\/book\/(.+)$/);
-if (m) navigate('book', m[1]);
-else renderLibrary();
+(async () => {
+  await loadUser();
+  const m = location.hash.match(/^#\/book\/(.+)$/);
+  if (m) navigate('book', m[1]);
+  else renderLibrary();
+})();

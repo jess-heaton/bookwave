@@ -1,17 +1,20 @@
-import asyncio, os, re, socket, uuid, time, threading, webbrowser
+import asyncio, os, re, socket, uuid, time, threading, webbrowser, secrets
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import urlencode
 
 import aiosqlite
+import httpx
 try:
     import pymupdf as fitz
 except ImportError:
     import fitz
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 # Storage lives OUTSIDE the project dir so OneDrive doesn't sync audio files.
@@ -37,8 +40,16 @@ print(f"[Freedible] storage: {STORE}")
 for d in (STATIC, COVERS, AUDIO, UPLOADS):
     d.mkdir(parents=True, exist_ok=True)
 
+# ── Auth config ───────────────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+SESSION_SECRET       = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
+ADMIN_EMAIL          = os.environ.get("ADMIN_EMAIL", "jessheaton001@gmail.com").lower()
+AUTH_ENABLED         = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=False, max_age=60*60*24*30)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/covers", StaticFiles(directory=str(COVERS)), name="covers")
 app.mount("/audio",  StaticFiles(directory=str(AUDIO)),  name="audio")
@@ -60,6 +71,21 @@ async def init_db():
             audio TEXT DEFAULT '', status TEXT DEFAULT 'pending')""")
         await db.execute("""CREATE TABLE IF NOT EXISTS texts (
             id TEXT PRIMARY KEY, text TEXT)""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY, email TEXT UNIQUE, name TEXT DEFAULT '',
+            picture TEXT DEFAULT '', created REAL)""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS reports (
+            id TEXT PRIMARY KEY, book_id TEXT, reporter_email TEXT,
+            reason TEXT, status TEXT DEFAULT 'open', created REAL)""")
+        # Migrations for existing deploys
+        async with db.execute("PRAGMA table_info(books)") as c:
+            cols = {r[1] for r in await c.fetchall()}
+        if "user_id" not in cols:
+            await db.execute("ALTER TABLE books ADD COLUMN user_id TEXT DEFAULT ''")
+        if "visibility" not in cols:
+            await db.execute("ALTER TABLE books ADD COLUMN visibility TEXT DEFAULT 'private'")
+        if "rights_attestation" not in cols:
+            await db.execute("ALTER TABLE books ADD COLUMN rights_attestation INTEGER DEFAULT 0")
         await db.commit()
 
 @app.on_event("startup")
@@ -318,6 +344,104 @@ async def generate_book(book_id, voice_id):
     progress[book_id]["status"] = final
     print(f"[GEN] Done — {len(chapters)-errors}/{len(chapters)} OK")
 
+# ── Auth helpers ──────────────────────────────────────────────────────────────
+async def get_user(request: Request):
+    """Returns the current user row from the DB, or None if not signed in."""
+    uid = request.session.get("uid")
+    if not uid:
+        return None
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE id=?", (uid,)) as c:
+            row = await c.fetchone()
+    return dict(row) if row else None
+
+async def require_user(request: Request):
+    u = await get_user(request)
+    if not u:
+        raise HTTPException(401, "Sign in required")
+    return u
+
+async def require_admin(request: Request):
+    u = await require_user(request)
+    if (u.get("email") or "").lower() != ADMIN_EMAIL:
+        raise HTTPException(403, "Admin only")
+    return u
+
+# ── Auth routes ───────────────────────────────────────────────────────────────
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    u = await get_user(request)
+    if not u: return {"user": None}
+    return {"user": {
+        "id": u["id"], "email": u["email"], "name": u["name"],
+        "picture": u["picture"], "is_admin": u["email"].lower() == ADMIN_EMAIL,
+    }}
+
+@app.get("/api/auth/google")
+async def auth_google(request: Request):
+    if not AUTH_ENABLED:
+        raise HTTPException(503, "Google sign-in not configured")
+    state = secrets.token_urlsafe(24)
+    request.session["oauth_state"] = state
+    redirect_uri = str(request.url_for("auth_callback"))
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    }
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}")
+
+@app.get("/api/auth/callback", name="auth_callback")
+async def auth_callback(request: Request, code: str = "", state: str = ""):
+    if not AUTH_ENABLED:
+        raise HTTPException(503, "Google sign-in not configured")
+    if not code or state != request.session.get("oauth_state"):
+        raise HTTPException(400, "Invalid OAuth state")
+    redirect_uri = str(request.url_for("auth_callback"))
+    async with httpx.AsyncClient(timeout=10) as client:
+        tok = await client.post("https://oauth2.googleapis.com/token", data={
+            "code": code, "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": redirect_uri, "grant_type": "authorization_code",
+        })
+        if tok.status_code != 200:
+            raise HTTPException(400, f"Token exchange failed: {tok.text}")
+        access = tok.json().get("access_token")
+        info = await client.get("https://www.googleapis.com/oauth2/v3/userinfo",
+                                headers={"Authorization": f"Bearer {access}"})
+        if info.status_code != 200:
+            raise HTTPException(400, "Userinfo failed")
+        data = info.json()
+    email = (data.get("email") or "").lower()
+    if not email or not data.get("email_verified", True):
+        raise HTTPException(400, "No verified email")
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT id FROM users WHERE email=?", (email,)) as c:
+            existing = await c.fetchone()
+        if existing:
+            uid = existing["id"]
+            await db.execute("UPDATE users SET name=?, picture=? WHERE id=?",
+                             (data.get("name",""), data.get("picture",""), uid))
+        else:
+            uid = str(uuid.uuid4())
+            await db.execute("INSERT INTO users VALUES (?,?,?,?,?)",
+                             (uid, email, data.get("name",""), data.get("picture",""), time.time()))
+        await db.commit()
+    request.session["uid"] = uid
+    request.session.pop("oauth_state", None)
+    return RedirectResponse("/")
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/")
 async def root(): return FileResponse(str(STATIC / "index.html"))
@@ -330,7 +454,8 @@ BLOCKED_TERMS = {
 }
 
 @app.post("/api/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(request: Request, file: UploadFile = File(...)):
+    user = await require_user(request)
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "PDF only")
     data = await file.read()
@@ -372,8 +497,11 @@ async def upload(file: UploadFile = File(...)):
         raise HTTPException(400, "Content not permitted on Freedible")
     chapters = split_chapters(full)
     async with aiosqlite.connect(DB) as db:
-        await db.execute("INSERT INTO books VALUES (?,?,?,?,?,?,?,?,?)",
-            (bid, title, author, f"/covers/{bid}.jpg", len(chapters), 0, "uploaded", "af_bella", time.time()))
+        await db.execute(
+            "INSERT INTO books (id,title,author,cover,total,done,status,voice,created,user_id,visibility,rights_attestation) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (bid, title, author, f"/covers/{bid}.jpg", len(chapters), 0, "uploaded", "af_bella",
+             time.time(), user["id"], "private", 0))
         for i, ch in enumerate(chapters):
             cid = str(uuid.uuid4())
             await db.execute("INSERT INTO chapters VALUES (?,?,?,?,?,?,?)",
@@ -382,32 +510,117 @@ async def upload(file: UploadFile = File(...)):
         await db.commit()
     return {"id": bid, "title": title, "chapters": len(chapters)}
 
+def _can_view(book: dict, user: dict | None) -> bool:
+    if book.get("visibility") == "public":
+        return True
+    return bool(user) and book.get("user_id") == user["id"]
+
+def _is_owner(book: dict, user: dict | None) -> bool:
+    return bool(user) and book.get("user_id") == user["id"]
+
 @app.get("/api/books")
-async def list_books():
+async def list_books(request: Request, scope: str = "all"):
+    """scope=all (default): public + your own. scope=mine: your own only. scope=public: public only."""
+    user = await get_user(request)
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM books ORDER BY created DESC") as c:
-            return [dict(r) for r in await c.fetchall()]
+        if scope == "mine":
+            if not user: return []
+            q, args = "SELECT * FROM books WHERE user_id=? ORDER BY created DESC", (user["id"],)
+        elif scope == "public":
+            q, args = "SELECT * FROM books WHERE visibility='public' ORDER BY created DESC", ()
+        else:
+            if user:
+                q, args = ("SELECT * FROM books WHERE visibility='public' OR user_id=? ORDER BY created DESC", (user["id"],))
+            else:
+                q, args = ("SELECT * FROM books WHERE visibility='public' ORDER BY created DESC", ())
+        async with db.execute(q, args) as c:
+            rows = [dict(r) for r in await c.fetchall()]
+    for r in rows:
+        r["is_owner"] = bool(user) and r.get("user_id") == user["id"]
+    return rows
 
 @app.get("/api/books/{bid}")
-async def get_book(bid: str):
+async def get_book(request: Request, bid: str):
+    user = await get_user(request)
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM books WHERE id=?", (bid,)) as c:
             book = await c.fetchone()
         if not book: raise HTTPException(404)
+        book = dict(book)
+        if not _can_view(book, user):
+            raise HTTPException(404)
         async with db.execute(
             "SELECT id,num,title,words,audio,status FROM chapters WHERE book_id=? ORDER BY num", (bid,)) as c:
             chs = await c.fetchall()
-    return {**dict(book), "chapters": [dict(c) for c in chs]}
+    book["is_owner"] = _is_owner(book, user)
+    return {**book, "chapters": [dict(c) for c in chs]}
 
-@app.post("/api/books/{bid}/generate")
-async def generate(bid: str, background_tasks: BackgroundTasks, voice: str = "af_bella"):
+@app.post("/api/books/{bid}/publish")
+async def publish_book(request: Request, bid: str, visibility: str = Form(...), attest: bool = Form(False)):
+    user = await require_user(request)
+    if visibility not in ("public", "private"):
+        raise HTTPException(400, "Invalid visibility")
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT status FROM books WHERE id=?", (bid,)) as c:
+        async with db.execute("SELECT user_id FROM books WHERE id=?", (bid,)) as c:
+            row = await c.fetchone()
+        if not row: raise HTTPException(404)
+        if row["user_id"] != user["id"]:
+            raise HTTPException(403, "Not your book")
+        if visibility == "public" and not attest:
+            raise HTTPException(400, "Must attest ownership or public-domain status to publish")
+        await db.execute("UPDATE books SET visibility=?, rights_attestation=? WHERE id=?",
+                         (visibility, 1 if attest else 0, bid))
+        await db.commit()
+    return {"ok": True, "visibility": visibility}
+
+@app.post("/api/books/{bid}/report")
+async def report_book(request: Request, bid: str, reason: str = Form("")):
+    user = await get_user(request)
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT visibility FROM books WHERE id=?", (bid,)) as c:
+            row = await c.fetchone()
+        if not row or row["visibility"] != "public":
+            raise HTTPException(404)
+        rid = str(uuid.uuid4())
+        await db.execute("INSERT INTO reports VALUES (?,?,?,?,?,?)",
+                         (rid, bid, (user or {}).get("email", ""), reason[:500], "open", time.time()))
+        await db.commit()
+    print(f"[REPORT] Book {bid} reported. Reason: {reason[:200]}")
+    return {"ok": True}
+
+@app.get("/api/admin/reports")
+async def list_reports(request: Request):
+    await require_admin(request)
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT r.*, b.title as book_title FROM reports r
+            LEFT JOIN books b ON b.id = r.book_id
+            ORDER BY r.created DESC""") as c:
+            return [dict(r) for r in await c.fetchall()]
+
+@app.post("/api/admin/takedown/{bid}")
+async def takedown(request: Request, bid: str):
+    await require_admin(request)
+    async with aiosqlite.connect(DB) as db:
+        await db.execute("UPDATE books SET visibility='private' WHERE id=?", (bid,))
+        await db.execute("UPDATE reports SET status='resolved' WHERE book_id=?", (bid,))
+        await db.commit()
+    return {"ok": True}
+
+@app.post("/api/books/{bid}/generate")
+async def generate(request: Request, bid: str, background_tasks: BackgroundTasks, voice: str = "af_bella"):
+    user = await require_user(request)
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT status,user_id FROM books WHERE id=?", (bid,)) as c:
             book = await c.fetchone()
         if not book: raise HTTPException(404)
+        if book["user_id"] != user["id"]: raise HTTPException(403, "Not your book")
         await db.execute("UPDATE books SET status='generating', voice=?, done=0 WHERE id=?", (voice, bid))
         await db.execute("UPDATE chapters SET status='pending', audio='' WHERE book_id=?", (bid,))
         await db.commit()
@@ -415,7 +628,14 @@ async def generate(bid: str, background_tasks: BackgroundTasks, voice: str = "af
     return {"ok": True}
 
 @app.get("/api/books/{bid}/progress")
-async def get_progress(bid: str):
+async def get_progress(request: Request, bid: str):
+    user = await get_user(request)
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT status,total,done,user_id,visibility FROM books WHERE id=?", (bid,)) as c:
+            b = await c.fetchone()
+    if not b: raise HTTPException(404)
+    if not _can_view(dict(b), user): raise HTTPException(404)
     if bid in progress:
         p = progress[bid]
         eta = None
@@ -424,28 +644,29 @@ async def get_progress(bid: str):
             per_ch = elapsed / p["done"]
             eta = int(per_ch * (p["total"] - p["done"]))
         return {**p, "eta": eta}
-    async with aiosqlite.connect(DB) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT status,total,done FROM books WHERE id=?", (bid,)) as c:
-            b = await c.fetchone()
-    if not b: raise HTTPException(404)
     return {"status": b["status"], "done": b["done"], "total": b["total"], "current": "", "eta": None}
 
 @app.delete("/api/books/{bid}")
-async def delete_book(bid: str):
+async def delete_book(request: Request, bid: str):
+    user = await require_user(request)
+    is_admin = (user.get("email") or "").lower() == ADMIN_EMAIL
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT user_id,cover FROM books WHERE id=?", (bid,)) as c:
+            b = await c.fetchone()
+        if not b: raise HTTPException(404)
+        if b["user_id"] != user["id"] and not is_admin:
+            raise HTTPException(403, "Not your book")
         async with db.execute("SELECT audio FROM chapters WHERE book_id=?", (bid,)) as c:
             for ch in await c.fetchall():
                 if ch["audio"]:
                     p = BASE / ch["audio"].lstrip("/")
                     p.unlink(missing_ok=True)
-        async with db.execute("SELECT cover FROM books WHERE id=?", (bid,)) as c:
-            b = await c.fetchone()
-        if b and b["cover"]:
+        if b["cover"]:
             (BASE / b["cover"].lstrip("/")).unlink(missing_ok=True)
         await db.execute("DELETE FROM texts WHERE id IN (SELECT id FROM chapters WHERE book_id=?)", (bid,))
         await db.execute("DELETE FROM chapters WHERE book_id=?", (bid,))
+        await db.execute("DELETE FROM reports WHERE book_id=?", (bid,))
         await db.execute("DELETE FROM books WHERE id=?", (bid,))
         await db.commit()
     return {"ok": True}
@@ -458,9 +679,11 @@ async def list_voices():
 async def get_stats():
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT COUNT(*) as n FROM books WHERE status='complete'") as c:
+        async with db.execute("SELECT COUNT(*) as n FROM books WHERE status='complete' AND visibility='public'") as c:
             books = (await c.fetchone())["n"]
-        async with db.execute("SELECT SUM(words) as w FROM chapters WHERE audio != ''") as c:
+        async with db.execute("""SELECT SUM(c.words) as w FROM chapters c
+            JOIN books b ON b.id = c.book_id
+            WHERE c.audio != '' AND b.visibility='public'""") as c:
             row = await c.fetchone()
             words = row["w"] or 0
     hours = round(words / 9000)  # ~150 wpm × 60 min
