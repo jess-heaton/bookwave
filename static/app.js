@@ -64,6 +64,33 @@ let showChapPanel = false;
 let draggingSeek = false;
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 let speedIdx = 1;
+let bookmarkSaveTimer = null;
+
+// ── Web Audio gain node (allows volume > 100%) ────────────────────────────────
+let audioCtx, gainNode, mediaSource;
+function getGain() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    mediaSource = audioCtx.createMediaElementSource(audio);
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 1;
+    mediaSource.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+  }
+  return gainNode;
+}
+function setGain(v) { getGain().gain.value = parseFloat(v); }
+
+// ── Bookmarks ─────────────────────────────────────────────────────────────────
+function saveBookmark(bookId, chapterId, time) {
+  try { localStorage.setItem('bm_' + bookId, JSON.stringify({ chapterId, time: Math.floor(time) })); } catch {}
+}
+function loadBookmark(bookId) {
+  try { return JSON.parse(localStorage.getItem('bm_' + bookId)) || null; } catch { return null; }
+}
+function clearBookmark(bookId) {
+  try { localStorage.removeItem('bm_' + bookId); } catch {}
+}
 
 // ── Router ────────────────────────────────────────────────────────────────────
 function navigate(page, id) {
@@ -421,7 +448,10 @@ function renderBook(progData) {
   const genControls = (() => {
     if (b.status === 'uploaded' || b.status === 'complete' || b.status === 'error') {
       return `<div class="voice-row">
-        <select class="voice-select" id="voice-sel">${voiceOptions}</select>
+        <div class="voice-pick-row">
+          <select class="voice-select" id="voice-sel" onchange="stopVoiceSample()">${voiceOptions}</select>
+          <button class="btn btn-ghost" style="padding:7px 12px;font-size:13px" onclick="previewVoice()" id="voice-preview-btn" title="Preview voice">▶ Preview</button>
+        </div>
         <button class="btn btn-primary" onclick="startGen()">${b.status === 'complete' ? 'Re-generate' : 'Generate Audiobook'}</button>
         ${firstReadyId ? `<button class="btn btn-primary" onclick="playChapter('${firstReadyId}')" style="background:var(--success)">▶ Play</button>` : ''}
       </div>`;
@@ -504,9 +534,19 @@ function renderBook(progData) {
         </span>
       </div>` : '';
 
+  const bm = loadBookmark(b.id);
+  const bmChapter = bm ? b.chapters.find(c => c.id === bm.chapterId && c.audio) : null;
+  const resumeBar = bmChapter ? `
+    <div class="resume-bar">
+      <span>Resume: <strong>${esc(bmChapter.title)}</strong> at ${fmt(bm.time)}</span>
+      <button class="btn btn-primary" style="padding:6px 16px;font-size:13px" onclick="resumeBookmark('${b.id}')">Resume</button>
+      <button class="btn btn-ghost" style="padding:6px 12px;font-size:13px" onclick="clearBookmark('${b.id}');this.closest('.resume-bar').remove()">Dismiss</button>
+    </div>` : '';
+
   document.getElementById('app').innerHTML = `
     <div class="page">
       <button class="btn btn-ghost back-btn" onclick="navigate('library');push('#/')">← Library</button>
+      ${resumeBar}
       <div class="hero">
         <div class="hero-cover">
           ${b.cover ? `<img src="${b.cover}" alt=""/>` : `<div class="hero-cover-ph">${bookSvg(52)}</div>`}
@@ -633,7 +673,54 @@ function loadAndPlay(ch) {
   audio.load();
   audio.play().catch(() => {});
   updatePlayerInfo();
+  updateMediaSession(ch);
+  audioCtx?.resume().catch(() => {});
 }
+
+function updateMediaSession(ch) {
+  if (!('mediaSession' in navigator) || !state.player) return;
+  const { book } = state.player;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: ch?.title || '',
+    artist: book.author || 'Freedible',
+    album: book.title,
+    artwork: book.cover ? [{ src: book.cover, sizes: '512x512' }] : [],
+  });
+  navigator.mediaSession.setActionHandler('play',          () => audio.play());
+  navigator.mediaSession.setActionHandler('pause',         () => audio.pause());
+  navigator.mediaSession.setActionHandler('previoustrack', () => playerPrev());
+  navigator.mediaSession.setActionHandler('nexttrack',     () => playerNext());
+  navigator.mediaSession.setActionHandler('seekbackward',  () => { audio.currentTime = Math.max(0, audio.currentTime - 30); });
+  navigator.mediaSession.setActionHandler('seekforward',   () => { audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30); });
+}
+
+// ── Mini player (shown when tab is backgrounded) ───────────────────────────────
+let miniPlayerEl = null;
+function updateMiniPlayer() {
+  if (document.visibilityState !== 'hidden') return;
+  if (!state.player || !audioPlaying) return;
+  if (!miniPlayerEl) {
+    miniPlayerEl = document.createElement('div');
+    miniPlayerEl.id = 'mini-player';
+    document.body.appendChild(miniPlayerEl);
+  }
+  const ch = currentPlayerChapter();
+  miniPlayerEl.innerHTML = `
+    <div class="mp-title">${esc(ch?.title || '')}</div>
+    <div class="mp-book">${esc(state.player.book.title)}</div>
+    <div class="mp-controls">
+      <button onclick="playerPrev()">⏮</button>
+      <button onclick="togglePlay()">${audioPlaying ? '⏸' : '▶'}</button>
+      <button onclick="playerNext()">⏭</button>
+    </div>`;
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && miniPlayerEl) {
+    miniPlayerEl.remove(); miniPlayerEl = null;
+  } else if (document.visibilityState === 'hidden' && state.player && audioPlaying) {
+    updateMiniPlayer();
+  }
+});
 
 audio.addEventListener('loadstart',  () => { audioLoading = true;  updatePlayBtn(); });
 audio.addEventListener('waiting',    () => { audioLoading = true;  updatePlayBtn(); });
@@ -649,6 +736,14 @@ audio.addEventListener('timeupdate', () => {
   const time = document.getElementById('player-time');
   if (fill) fill.style.width = pct + '%';
   if (time) time.textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+  // Auto-save bookmark every 5s
+  if (!bookmarkSaveTimer && state.player) {
+    bookmarkSaveTimer = setTimeout(() => {
+      if (state.player) saveBookmark(state.player.book.id, state.player.chapterId, audio.currentTime);
+      bookmarkSaveTimer = null;
+    }, 5000);
+  }
+  updateMiniPlayer();
 });
 audio.addEventListener('ended', () => {
   if (!state.player) return;
@@ -656,10 +751,12 @@ audio.addEventListener('ended', () => {
   const next = state.player.chapters[idx + 1];
   if (next) {
     state.player.chapterId = next.id;
+    saveBookmark(state.player.book.id, next.id, 0);
     loadAndPlay(next);
     renderPlayerBar();
     if (state.page === 'book') renderBook(lastProg);
   } else {
+    clearBookmark(state.player.book.id);
     audioPlaying = false; updatePlayBtn();
   }
 });
@@ -706,10 +803,12 @@ function renderPlayerBar() {
         <div class="player-time" id="player-time">0:00 / 0:00</div>
       </div>
       <div class="player-right">
-        <button class="speed-btn" onclick="cycleSpeed()">${SPEEDS[speedIdx]}×</button>
+        <div class="speed-bar">
+          ${SPEEDS.map((s,i) => `<button class="sp-btn${i===speedIdx?' active':''}" onclick="setSpeed(${i})">${s}×</button>`).join('')}
+        </div>
         <div class="vol-row">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--muted);flex-shrink:0"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
-          <input type="range" min="0" max="1" step="0.05" value="${audio.volume}" style="width:70px" onchange="audio.volume=+this.value"/>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="color:var(--muted);flex-shrink:0"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+          <input class="vol-slider" type="range" min="0" max="2" step="0.05" value="1" title="Volume boost" oninput="setGain(this.value)"/>
         </div>
         <button class="ibtn clist-btn${showChapPanel?' active':''}" onclick="toggleChapPanel()" title="Chapters">${listIcon()}</button>
       </div>
@@ -728,7 +827,38 @@ function renderPlayerBar() {
   track.addEventListener('click', seekTo);
 }
 
+let sampleAudio = null;
+function previewVoice() {
+  const voice = document.getElementById('voice-sel')?.value;
+  if (!voice) return;
+  const btn = document.getElementById('voice-preview-btn');
+  if (sampleAudio && !sampleAudio.paused) { stopVoiceSample(); return; }
+  if (btn) btn.textContent = '⏳ Loading…';
+  sampleAudio = new Audio(`/api/voices/sample/${encodeURIComponent(voice)}`);
+  sampleAudio.play().catch(() => {});
+  sampleAudio.onplay  = () => { if (btn) btn.textContent = '⏹ Stop'; };
+  sampleAudio.onended = () => { if (btn) btn.textContent = '▶ Preview'; sampleAudio = null; };
+  sampleAudio.onerror = () => { if (btn) btn.textContent = '▶ Preview'; sampleAudio = null; };
+}
+function stopVoiceSample() {
+  if (sampleAudio) { sampleAudio.pause(); sampleAudio = null; }
+  const btn = document.getElementById('voice-preview-btn');
+  if (btn) btn.textContent = '▶ Preview';
+}
+
+function resumeBookmark(bookId) {
+  const bm = loadBookmark(bookId);
+  if (!bm || !state.book) return;
+  const ch = state.book.chapters.find(c => c.id === bm.chapterId && c.audio);
+  if (!ch) return;
+  playChapter(ch.id);
+  audio.addEventListener('canplay', function seek() {
+    audio.currentTime = bm.time;
+    audio.removeEventListener('canplay', seek);
+  });
+}
 function togglePlay() {
+  if (audioCtx?.state === 'suspended') audioCtx.resume().catch(() => {});
   if (audioPlaying) audio.pause(); else audio.play();
 }
 function playerPrev() {
@@ -743,10 +873,10 @@ function playerNext() {
   const next = state.player.chapters[idx + 1];
   if (next) playChapter(next.id);
 }
-function cycleSpeed() {
-  speedIdx = (speedIdx + 1) % SPEEDS.length;
+function setSpeed(idx) {
+  speedIdx = idx;
   audio.playbackRate = SPEEDS[speedIdx];
-  document.querySelector('.speed-btn').textContent = SPEEDS[speedIdx] + '×';
+  document.querySelectorAll('.sp-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
 }
 function toggleChapPanel() {
   showChapPanel = !showChapPanel;

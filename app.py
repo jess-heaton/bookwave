@@ -675,6 +675,28 @@ async def delete_book(request: Request, bid: str):
 async def list_voices():
     return [{"id": v, "name": n} for v, n in KOKORO_VOICES]
 
+SAMPLE_TEXT = "Welcome to Freedible. I'll be your narrator, turning the pages of this book into something you can listen to, anywhere."
+
+@app.get("/api/voices/sample/{voice_id}")
+async def voice_sample(voice_id: str):
+    valid_ids = {v for v, _ in KOKORO_VOICES}
+    if voice_id not in valid_ids:
+        raise HTTPException(400, "Unknown voice")
+    ext = "mp3" if USE_MODAL else "wav"
+    sample_path = AUDIO / f"_sample_{voice_id}.{ext}"
+    if not sample_path.exists():
+        try:
+            await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    _tts_executor, _run_kokoro, SAMPLE_TEXT, voice_id, str(sample_path)
+                ), timeout=120
+            )
+        except Exception as e:
+            raise HTTPException(500, f"Sample generation failed: {e}")
+    if not sample_path.exists():
+        raise HTTPException(500, "Sample not generated")
+    return FileResponse(str(sample_path), media_type=f"audio/{ext}")
+
 @app.get("/api/stats")
 async def get_stats():
     async with aiosqlite.connect(DB) as db:
