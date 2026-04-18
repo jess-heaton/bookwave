@@ -285,14 +285,14 @@ function openUpload() {
              onclick="document.getElementById('file-input').click()">
           <div class="drop-icon">${uploadSvg()}</div>
           <div class="drop-title" id="drop-title">Drop your PDF here</div>
-          <div class="drop-sub" id="drop-sub">or click to browse · PDF only</div>
+          <div class="drop-sub" id="drop-sub">or click to browse · PDF or ePub</div>
         </div>
         <div class="error-msg" id="upload-err" style="display:none"></div>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeUpload()">Cancel</button>
           <button class="btn btn-primary" id="upload-btn" onclick="doUpload()" disabled>Add Privately</button>
         </div>
-        <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="fileChosen(this.files[0])"/>
+        <input type="file" id="file-input" accept=".pdf,.epub" style="display:none" onchange="fileChosen(this.files[0])"/>
       </div>
     </div>`);
 }
@@ -306,7 +306,7 @@ function dzDrop(e) {
   if (f) fileChosen(f);
 }
 function fileChosen(f) {
-  if (!f || !f.name.endsWith('.pdf')) return;
+  if (!f || (!f.name.toLowerCase().endsWith('.pdf') && !f.name.toLowerCase().endsWith('.epub'))) return;
   uploadFile = f;
   const dz = document.getElementById('drop-zone');
   dz.classList.add('has-file'); dz.classList.remove('dragover');

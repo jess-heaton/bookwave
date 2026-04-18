@@ -175,6 +175,146 @@ KOKORO_VOICES = [
 def _lang_for_voice(voice: str) -> str:
     return "b" if voice.startswith("b") else "a"
 
+# ── ePub helpers ──────────────────────────────────────────────────────────────
+def _epub_img_ext(data: bytes) -> str:
+    if data[:2] == b'\xff\xd8': return '.jpg'
+    if data[:4] == b'\x89PNG': return '.png'
+    return '.jpg'
+
+def _html_to_tts_text(html_bytes: bytes) -> tuple[str, str]:
+    """Strip HTML, extract heading and body text suitable for TTS."""
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        raise RuntimeError("beautifulsoup4 not installed — run: pip install beautifulsoup4 lxml")
+
+    soup = BeautifulSoup(html_bytes, 'lxml')
+
+    # Drop non-content elements
+    for tag in soup.find_all(['script', 'style', 'head', 'nav', 'aside', 'figure', 'figcaption', 'table']):
+        tag.decompose()
+
+    # Extract chapter heading before stripping
+    heading = ''
+    h = soup.find(['h1', 'h2', 'h3'])
+    if h:
+        heading = h.get_text(' ', strip=True)[:100]
+        h.decompose()
+
+    # Insert a period after block-level tags so TTS pauses between paragraphs
+    for tag in soup.find_all(['p', 'li', 'blockquote', 'div', 'br', 'h4', 'h5', 'h6']):
+        txt = tag.get_text(strip=True)
+        if txt and not txt[-1] in '.!?:;':
+            tag.append(soup.new_string(' '))
+
+    text = soup.get_text(separator=' ')
+
+    # Remove footnote/endnote markers: [1], (1), superscript unicode digits
+    text = re.sub(r'\s*\[\d+\]|\s*\(\d+\)|\s*[¹²³⁴⁵⁶⁷⁸⁹⁰]+', '', text)
+    # Remove standalone page labels
+    text = re.sub(r'\bPage\s+\d+\b', '', text, flags=re.IGNORECASE)
+    # Normalise whitespace
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    return heading, text.strip()
+
+def _parse_epub(data: bytes, bid: str) -> dict:
+    """Return {title, author, cover_url, chapters:[{title,text}]} from raw ePub bytes."""
+    try:
+        import ebooklib
+        from ebooklib import epub as epublib
+    except ImportError:
+        raise RuntimeError("ebooklib not installed — run: pip install ebooklib")
+
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix='.epub', delete=False) as f:
+        f.write(data)
+        tmp = f.name
+    try:
+        book = epublib.read_epub(tmp, options={'ignore_ncx': True})
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+    # ── Metadata ──────────────────────────────────────────────────────────────
+    def _dc(name):
+        items = book.get_metadata('DC', name)
+        return items[0][0].strip() if items else ''
+    title  = _dc('title')
+    author = _dc('creator')
+
+    # ── Cover image ───────────────────────────────────────────────────────────
+    cover_url = ''
+    cover_data = None
+    for item in book.get_items_of_type(ebooklib.ITEM_IMAGE):
+        props = getattr(item, 'properties', []) or []
+        name  = (item.get_name() or '').lower()
+        iid   = (item.get_id()   or '').lower()
+        if 'cover-image' in props or iid in ('cover', 'cover-image', 'coverimage') or ('cover' in name and 'img' not in name):
+            cover_data = item.get_content()
+            break
+    # Fallback: OPF meta reference
+    if not cover_data:
+        for meta in (book.get_metadata('OPF', 'cover') or []):
+            cid = (meta[1] or {}).get('content', '')
+            item = book.get_item_with_id(cid) if cid else None
+            if item:
+                cover_data = item.get_content()
+                break
+    # Last resort: first image large enough to be a cover
+    if not cover_data:
+        for item in book.get_items_of_type(ebooklib.ITEM_IMAGE):
+            d = item.get_content()
+            if len(d) > 20_000:
+                cover_data = d
+                break
+    if cover_data:
+        ext = _epub_img_ext(cover_data)
+        cover_path = COVERS / f"{bid}{ext}"
+        cover_path.write_bytes(cover_data)
+        cover_url = f"/covers/{bid}{ext}"
+
+    # ── Chapters via spine ────────────────────────────────────────────────────
+    spine_ids = [sid for sid, _ in (book.spine or [])]
+    doc_map   = {item.get_id(): item for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT)}
+
+    chapters: list[dict] = []
+    seen: set[str] = set()
+
+    def _add_item(item):
+        if item.get_id() in seen:
+            return
+        seen.add(item.get_id())
+        try:
+            heading, text = _html_to_tts_text(item.get_content())
+            text = clean_text(text)
+        except Exception:
+            return
+        if len(text.split()) < 50:
+            return
+        ch_title = heading or f"Chapter {len(chapters) + 1}"
+        chapters.append({'title': ch_title, 'text': text})
+
+    for sid in spine_ids:
+        item = doc_map.get(sid)
+        if item:
+            _add_item(item)
+    # Fallback: any docs not in spine
+    if not chapters:
+        for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+            _add_item(item)
+
+    # If spine items are too granular (many tiny sections), merge into ~2500-word chunks
+    if chapters and all(len(c['text'].split()) < 600 for c in chapters):
+        full = '\n\n'.join(c['text'] for c in chapters)
+        chapters = split_chapters(full)
+
+    # Final fallback: treat as one text and auto-split
+    if not chapters:
+        raise ValueError("Could not extract any readable text from this ePub")
+
+    return {'title': title, 'author': author, 'cover_url': cover_url, 'chapters': chapters}
+
 def clean_text(text):
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', text)
     text = re.sub(r'[^\S\n]+', ' ', text)
@@ -456,59 +596,94 @@ BLOCKED_TERMS = {
 @app.post("/api/upload")
 async def upload(request: Request, file: UploadFile = File(...)):
     user = await require_user(request)
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "PDF only")
+    fname = (file.filename or '').lower()
+    is_epub = fname.endswith('.epub')
+    is_pdf  = fname.endswith('.pdf')
+    if not is_epub and not is_pdf:
+        raise HTTPException(400, "PDF or ePub files only")
+
     data = await file.read()
     if len(data) > MAX_PDF_BYTES:
-        raise HTTPException(413, f"PDF too large (max {MAX_PDF_BYTES // (1024*1024)} MB)")
+        raise HTTPException(413, f"File too large (max {MAX_PDF_BYTES // (1024*1024)} MB)")
     if len(data) < MIN_PDF_BYTES:
-        raise HTTPException(400, "PDF too small or empty")
-    if not data[:5] == b"%PDF-":
-        raise HTTPException(400, "Not a valid PDF file")
+        raise HTTPException(400, "File too small or empty")
+
     bid = str(uuid.uuid4())
-    pdf_path = UPLOADS / f"{bid}.pdf"
-    pdf_path.write_bytes(data)
+    upload_path = UPLOADS / f"{bid}{'.epub' if is_epub else '.pdf'}"
+    upload_path.write_bytes(data)
+
+    title = author = ''
+    cover_url = ''
+    chapters: list[dict] = []
+
     try:
-        doc = fitz.open(str(pdf_path))
-    except:
-        pdf_path.unlink(missing_ok=True)
-        raise HTTPException(400, "Cannot read PDF")
-    # Cover
-    page = doc[0]
-    zoom = min(600/page.rect.width, 900/page.rect.height, 2.0)
-    pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
-    cover_file = COVERS / f"{bid}.jpg"
-    pix.save(str(cover_file))
-    # Metadata
-    meta = doc.metadata or {}
-    title = (meta.get("title") or "").strip()
-    author = (meta.get("author") or "").strip()
-    if not title:
-        lines = [l.strip() for l in doc[0].get_text().split("\n") if l.strip()]
-        title = lines[0][:80] if lines else Path(file.filename).stem
-    # Text + chapters
-    full = "\n".join(p.get_text() for p in doc)
-    doc.close()
-    low = full.lower()
-    hits = sum(1 for t in BLOCKED_TERMS if t in low)
-    if hits >= 2 or any(t in low for t in ("csam", "child abuse", "bestiality")):
-        pdf_path.unlink(missing_ok=True)
-        cover_file.unlink(missing_ok=True)
-        raise HTTPException(400, "Content not permitted on Freedible")
-    chapters = split_chapters(full)
-    async with aiosqlite.connect(DB) as db:
-        await db.execute(
-            "INSERT INTO books (id,title,author,cover,total,done,status,voice,created,user_id,visibility,rights_attestation) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (bid, title, author, f"/covers/{bid}.jpg", len(chapters), 0, "uploaded", "af_bella",
-             time.time(), user["id"], "private", 0))
-        for i, ch in enumerate(chapters):
-            cid = str(uuid.uuid4())
-            await db.execute("INSERT INTO chapters VALUES (?,?,?,?,?,?,?)",
-                (cid, bid, i+1, ch["title"], len(ch["text"].split()), "", "pending"))
-            await db.execute("INSERT INTO texts VALUES (?,?)", (cid, ch["text"]))
-        await db.commit()
-    return {"id": bid, "title": title, "chapters": len(chapters)}
+        if is_epub:
+            try:
+                parsed = _parse_epub(data, bid)
+            except Exception as e:
+                upload_path.unlink(missing_ok=True)
+                raise HTTPException(400, f"Cannot read ePub: {e}")
+            title     = parsed['title']
+            author    = parsed['author']
+            cover_url = parsed['cover_url']
+            chapters  = parsed['chapters']
+            if not title:
+                title = Path(file.filename).stem
+        else:
+            # ── PDF path ──────────────────────────────────────────────────────
+            if data[:5] != b"%PDF-":
+                raise HTTPException(400, "Not a valid PDF file")
+            try:
+                doc = fitz.open(str(upload_path))
+            except Exception:
+                upload_path.unlink(missing_ok=True)
+                raise HTTPException(400, "Cannot read PDF")
+            # Cover from first page
+            page = doc[0]
+            zoom = min(600/page.rect.width, 900/page.rect.height, 2.0)
+            pix  = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+            cover_path = COVERS / f"{bid}.jpg"
+            pix.save(str(cover_path))
+            cover_url = f"/covers/{bid}.jpg"
+            # Metadata
+            meta   = doc.metadata or {}
+            title  = (meta.get("title") or "").strip()
+            author = (meta.get("author") or "").strip()
+            if not title:
+                lines = [l.strip() for l in doc[0].get_text().split("\n") if l.strip()]
+                title = lines[0][:80] if lines else Path(file.filename).stem
+            full = "\n".join(p.get_text() for p in doc)
+            doc.close()
+            chapters = split_chapters(full)
+
+        # ── Content moderation (runs for both formats) ────────────────────────
+        full_text = ' '.join(c['text'] for c in chapters).lower()
+        hits = sum(1 for t in BLOCKED_TERMS if t in full_text)
+        if hits >= 2 or any(t in full_text for t in ("csam", "child abuse", "bestiality")):
+            upload_path.unlink(missing_ok=True)
+            for ext in ('.jpg', '.png'):
+                (COVERS / f"{bid}{ext}").unlink(missing_ok=True)
+            raise HTTPException(400, "Content not permitted on Freedible")
+
+        async with aiosqlite.connect(DB) as db:
+            await db.execute(
+                "INSERT INTO books (id,title,author,cover,total,done,status,voice,created,user_id,visibility,rights_attestation) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (bid, title, author, cover_url, len(chapters), 0, "uploaded", "af_bella",
+                 time.time(), user["id"], "private", 0))
+            for i, ch in enumerate(chapters):
+                cid = str(uuid.uuid4())
+                await db.execute("INSERT INTO chapters VALUES (?,?,?,?,?,?,?)",
+                    (cid, bid, i+1, ch["title"], len(ch["text"].split()), "", "pending"))
+                await db.execute("INSERT INTO texts VALUES (?,?)", (cid, ch["text"]))
+            await db.commit()
+        return {"id": bid, "title": title, "chapters": len(chapters)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        upload_path.unlink(missing_ok=True)
+        raise HTTPException(500, f"Upload failed: {e}")
 
 def _can_view(book: dict, user: dict | None) -> bool:
     if book.get("visibility") == "public":
