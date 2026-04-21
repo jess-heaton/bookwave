@@ -47,6 +47,59 @@ SESSION_SECRET       = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
 ADMIN_EMAIL          = os.environ.get("ADMIN_EMAIL", "jessheaton001@gmail.com").lower()
 AUTH_ENABLED         = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
+# ── Curated public-domain seed library ────────────────────────────────────────
+# (gutenberg_id, display_title, author, preferred_voice)
+_SEED_CATALOG = [
+    (1342,  "Pride and Prejudice",                       "Jane Austen",                "af_bella"),
+    (768,   "Wuthering Heights",                         "Emily Brontë",               "bf_emma"),
+    (84,    "Frankenstein",                              "Mary Shelley",               "af_nicole"),
+    (345,   "Dracula",                                   "Bram Stoker",                "bm_lewis"),
+    (174,   "The Picture of Dorian Gray",                "Oscar Wilde",                "bm_george"),
+    (1661,  "The Adventures of Sherlock Holmes",         "Arthur Conan Doyle",         "bm_lewis"),
+    (2852,  "The Hound of the Baskervilles",             "Arthur Conan Doyle",         "bm_lewis"),
+    (1260,  "Jane Eyre",                                 "Charlotte Brontë",           "bf_isabella"),
+    (158,   "Emma",                                      "Jane Austen",                "af_bella"),
+    (161,   "Sense and Sensibility",                     "Jane Austen",                "af_bella"),
+    (105,   "Persuasion",                                "Jane Austen",                "af_bella"),
+    (141,   "Mansfield Park",                            "Jane Austen",                "af_bella"),
+    (514,   "Little Women",                              "Louisa May Alcott",          "af_bella"),
+    (11,    "Alice's Adventures in Wonderland",          "Lewis Carroll",              "af_sarah"),
+    (120,   "Treasure Island",                           "Robert Louis Stevenson",     "bm_lewis"),
+    (43,    "The Strange Case of Dr Jekyll and Mr Hyde", "Robert Louis Stevenson",     "bm_george"),
+    (98,    "A Tale of Two Cities",                      "Charles Dickens",            "bm_george"),
+    (1400,  "Great Expectations",                        "Charles Dickens",            "bm_lewis"),
+    (730,   "Oliver Twist",                              "Charles Dickens",            "bm_lewis"),
+    (74,    "The Adventures of Tom Sawyer",              "Mark Twain",                 "am_adam"),
+    (76,    "Adventures of Huckleberry Finn",            "Mark Twain",                 "am_adam"),
+    (215,   "The Call of the Wild",                      "Jack London",                "am_michael"),
+    (35,    "The Time Machine",                          "H.G. Wells",                 "bm_george"),
+    (36,    "The War of the Worlds",                     "H.G. Wells",                 "bm_george"),
+    (5200,  "The Metamorphosis",                         "Franz Kafka",                "am_adam"),
+    (2701,  "Moby Dick",                                 "Herman Melville",            "am_adam"),
+    (2554,  "Crime and Punishment",                      "Fyodor Dostoevsky",          "am_michael"),
+    (2148,  "Anna Karenina",                             "Leo Tolstoy",                "af_nicole"),
+    (2600,  "War and Peace",                             "Leo Tolstoy",                "bm_george"),
+    (28054, "The Brothers Karamazov",                    "Fyodor Dostoevsky",          "am_michael"),
+    (2680,  "Meditations",                               "Marcus Aurelius",            "bm_george"),
+    (132,   "The Art of War",                            "Sun Tzu",                    "bm_george"),
+    (1232,  "The Prince",                                "Niccolò Machiavelli",        "bm_george"),
+    (5740,  "The Republic",                              "Plato",                      "bm_george"),
+    (8800,  "Thus Spoke Zarathustra",                    "Friedrich Nietzsche",        "bm_george"),
+    (1184,  "The Count of Monte Cristo",                 "Alexandre Dumas",            "bm_george"),
+    (164,   "Twenty Thousand Leagues Under the Sea",     "Jules Verne",                "bm_george"),
+    (4085,  "Around the World in Eighty Days",           "Jules Verne",                "bm_george"),
+    (996,   "Don Quixote",                               "Miguel de Cervantes",        "bm_george"),
+    (135,   "Les Misérables",                            "Victor Hugo",                "bm_george"),
+    (25344, "The Scarlet Letter",                        "Nathaniel Hawthorne",        "af_nicole"),
+    (55,    "The Wonderful Wizard of Oz",                "L. Frank Baum",              "af_sarah"),
+    (35997, "The Jungle Book",                           "Rudyard Kipling",            "bm_lewis"),
+    (1727,  "The Odyssey",                               "Homer",                      "bm_george"),
+    (64317, "The Great Gatsby",                          "F. Scott Fitzgerald",        "am_adam"),
+    (203,   "Uncle Tom's Cabin",                         "Harriet Beecher Stowe",      "af_nicole"),
+    (16,    "Peter Pan",                                 "J.M. Barrie",               "af_sarah"),
+    (1080,  "A Modest Proposal",                         "Jonathan Swift",             "bm_lewis"),
+]
+
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax", https_only=False, max_age=60*60*24*30)
@@ -1268,15 +1321,114 @@ async def takedown(request: Request, bid: str):
         await db.commit()
     return {"ok": True}
 
+# ── Library seeding ───────────────────────────────────────────────────────────
+async def _fetch_ol_cover(title: str, author: str) -> bytes | None:
+    """Fetch a high-quality cover image from Open Library. Returns bytes or None."""
+    try:
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            r = await client.get("https://openlibrary.org/search.json", params={
+                "title": title, "author": author, "fields": "cover_i", "limit": 1
+            })
+            docs = r.json().get("docs", [])
+            if not docs or "cover_i" not in docs[0]:
+                return None
+            cid = docs[0]["cover_i"]
+            r2 = await client.get(f"https://covers.openlibrary.org/b/id/{cid}-L.jpg")
+            if r2.status_code == 200 and len(r2.content) > 2000:
+                return r2.content
+    except Exception as e:
+        print(f"[SEED] OL cover fetch failed for '{title}': {e}")
+    return None
+
+async def _seed_one(gut_id: int, title: str, author: str, voice: str) -> dict:
+    """Download, parse, and insert one Gutenberg book. Returns result dict."""
+    # Skip duplicates
+    async with aiosqlite.connect(DB) as db:
+        async with db.execute("SELECT id FROM books WHERE title=? AND author=?", (title, author)) as c:
+            if await c.fetchone():
+                return {"status": "exists", "title": title}
+
+    # Download ePub
+    url = f"https://www.gutenberg.org/cache/epub/{gut_id}/pg{gut_id}.epub"
+    try:
+        async with httpx.AsyncClient(timeout=90, follow_redirects=True) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            data = r.content
+    except Exception as e:
+        return {"status": "error", "title": title, "reason": f"download: {e}"}
+
+    bid = str(uuid.uuid4())
+    try:
+        parsed = _parse_epub(data, bid)
+    except Exception as e:
+        return {"status": "error", "title": title, "reason": f"parse: {e}"}
+
+    chapters  = parsed["chapters"]
+    cover_url = parsed["cover_url"]
+
+    # Try Open Library for a nicer cover
+    ol_bytes = await _fetch_ol_cover(title, author)
+    if ol_bytes:
+        cover_path = COVERS / f"{bid}.jpg"
+        cover_path.write_bytes(ol_bytes)
+        cover_url = f"/covers/{bid}.jpg"
+
+    async with aiosqlite.connect(DB) as db:
+        await db.execute(
+            "INSERT INTO books (id,title,author,cover,total,done,status,voice,created,user_id,visibility,rights_attestation) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (bid, title, author, cover_url, len(chapters), 0, "uploaded",
+             voice, time.time(), "__seed__", "public", 1))
+        for i, ch in enumerate(chapters):
+            cid = str(uuid.uuid4())
+            await db.execute("INSERT INTO chapters VALUES (?,?,?,?,?,?,?)",
+                (cid, bid, i+1, ch["title"], len(ch["text"].split()), "", "pending"))
+            await db.execute("INSERT INTO texts VALUES (?,?)", (cid, ch["text"]))
+        await db.commit()
+
+    print(f"[SEED] ✓ {title} — {len(chapters)} chapters, cover={'OL' if ol_bytes else 'epub'}")
+    return {"status": "seeded", "id": bid, "title": title, "chapters": len(chapters)}
+
+async def _seed_all_task():
+    print(f"[SEED] Starting batch seed of {len(_SEED_CATALOG)} books")
+    for gut_id, title, author, voice in _SEED_CATALOG:
+        result = await _seed_one(gut_id, title, author, voice)
+        print(f"[SEED] {result}")
+        await asyncio.sleep(3)  # gentle rate-limit on Gutenberg
+    print("[SEED] Batch complete")
+
+@app.post("/api/admin/seed")
+async def admin_seed_one(request: Request, background_tasks: BackgroundTasks,
+                         gut_id: int = Form(...)):
+    await require_admin(request)
+    entry = next((e for e in _SEED_CATALOG if e[0] == gut_id), None)
+    if not entry:
+        raise HTTPException(400, f"Gutenberg ID {gut_id} not in seed catalog")
+    background_tasks.add_task(_seed_one, *entry)
+    return {"status": "started", "title": entry[1]}
+
+@app.post("/api/admin/seed-all")
+async def admin_seed_all(request: Request, background_tasks: BackgroundTasks):
+    await require_admin(request)
+    background_tasks.add_task(_seed_all_task)
+    return {"status": "started", "books": len(_SEED_CATALOG)}
+
+@app.get("/api/admin/catalog")
+async def admin_catalog(request: Request):
+    await require_admin(request)
+    return [{"gut_id": e[0], "title": e[1], "author": e[2], "voice": e[3]} for e in _SEED_CATALOG]
+
 @app.post("/api/books/{bid}/generate")
 async def generate(request: Request, bid: str, background_tasks: BackgroundTasks, voice: str = "af_bella"):
     user = await require_user(request)
+    is_admin = (user.get("email") or "").lower() == ADMIN_EMAIL
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT status,user_id FROM books WHERE id=?", (bid,)) as c:
             book = await c.fetchone()
         if not book: raise HTTPException(404)
-        if book["user_id"] != user["id"]: raise HTTPException(403, "Not your book")
+        if book["user_id"] != user["id"] and not is_admin: raise HTTPException(403, "Not your book")
         await db.execute("UPDATE books SET status='generating', voice=?, done=0 WHERE id=?", (voice, bid))
         await db.execute("UPDATE chapters SET status='pending', audio='' WHERE book_id=?", (bid,))
         await db.commit()

@@ -483,7 +483,10 @@ async function reportBook() {
 
 async function openAdmin() {
   try {
-    const reports = await api('GET', '/api/admin/reports');
+    const [reports, catalog] = await Promise.all([
+      api('GET', '/api/admin/reports'),
+      api('GET', '/api/admin/catalog'),
+    ]);
     const rows = reports.length
       ? reports.map(r => `
           <div class="admin-row">
@@ -495,14 +498,66 @@ async function openAdmin() {
             <button class="btn btn-danger" onclick="takedown('${r.book_id}')">Make Private</button>
           </div>`).join('')
       : '<div class="empty-state">No reports.</div>';
+
+    const catalogRows = catalog.map(e => `
+      <div class="admin-row" style="padding:10px 0">
+        <div style="flex:1">
+          <div class="admin-row-title" style="font-size:14px">${esc(e.title)}</div>
+          <div class="admin-row-meta">${esc(e.author)} · Gutenberg #${e.gut_id} · voice: ${esc(e.voice)}</div>
+        </div>
+        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px"
+          onclick="seedOne(${e.gut_id}, this)">Seed</button>
+      </div>`).join('');
+
     document.getElementById('app').insertAdjacentHTML('beforeend', `
       <div class="overlay" id="admin-overlay" onclick="if(event.target.id==='admin-overlay')this.remove()">
-        <div class="modal" style="max-width:720px">
-          <div class="modal-header"><h2>Reports</h2><button class="ibtn" onclick="document.getElementById('admin-overlay').remove()">${closeIcon()}</button></div>
-          <div class="admin-list">${rows}</div>
+        <div class="modal" style="max-width:760px;max-height:90vh;overflow-y:auto">
+          <div class="modal-header"><h2>Admin</h2><button class="ibtn" onclick="document.getElementById('admin-overlay').remove()">${closeIcon()}</button></div>
+
+          <div style="padding:0 24px 16px">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 8px">Seed Public Library</h3>
+            <p style="font-size:13px;color:#8888aa;margin:0 0 12px">Download books from Project Gutenberg + Open Library covers and add them as public books. Seeding all 47 books runs in the background.</p>
+            <button class="btn btn-primary" onclick="seedAll(this)" style="margin-bottom:16px">⬇ Seed All ${catalog.length} Books</button>
+            <div class="admin-list" style="max-height:260px;overflow-y:auto">${catalogRows}</div>
+          </div>
+
+          <div style="padding:0 24px 16px">
+            <h3 style="font-size:15px;font-weight:700;margin:0 0 8px">Reports</h3>
+            <div class="admin-list">${rows}</div>
+          </div>
         </div>
       </div>`);
   } catch (e) { alert(e.message); }
+}
+
+async function seedAll(btn) {
+  if (!confirm('Seed all books from Project Gutenberg? This runs in the background on the server.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Seeding…';
+  try {
+    await api('POST', '/api/admin/seed-all');
+    btn.textContent = '✓ Seeding started — check server logs';
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '⬇ Seed All Books';
+    alert(e.message);
+  }
+}
+
+async function seedOne(gutId, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const fd = new FormData();
+    fd.append('gut_id', gutId);
+    await api('POST', '/api/admin/seed', fd);
+    btn.textContent = '✓';
+    btn.style.color = '#4ade80';
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Seed';
+    alert(e.message);
+  }
 }
 
 async function takedown(bid) {
