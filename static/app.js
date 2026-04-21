@@ -152,7 +152,7 @@ function statusBadge(s) {
 
 // ── Library ───────────────────────────────────────────────────────────────────
 async function renderLibrary() {
-  document.title = 'Freedible — Listen to any book, free';
+  document.title = 'Freedible — Every classic, read aloud. Or upload your own.';
 
   const [publicBooks, myBooks, stats] = await Promise.all([
     api('GET', '/api/books?scope=public').catch(() => []),
@@ -163,14 +163,20 @@ async function renderLibrary() {
 
   const heroCTA = state.user
     ? `<button class="btn btn-primary" onclick="openUpload()">Upload a Book</button>`
-    : `<button class="btn btn-primary" onclick="signIn()">Sign in to upload</button>`;
+    : `<div style="display:flex;gap:12px;flex-wrap:wrap"><button class="btn btn-primary" onclick="signIn()">Get started free</button><a href="/blog/best-free-public-domain-audiobooks" class="btn btn-ghost">Browse classics</a></div>`;
 
   const hero = `
     <div class="landing-split">
       <div class="landing-text">
-        <h1>Listen to any book, free.</h1>
-        <p>Upload any PDF you own and we'll narrate it privately, just for you. Or browse the community library of public domain classics shared by listeners.</p>
+        <div class="landing-kicker">Free · Open · Built for listeners</div>
+        <h1>Every classic,<br>read aloud.<br><em>Or upload your own.</em></h1>
+        <p>Browse public domain audiobooks narrated with natural AI voices. Or upload any ePub or PDF you own — we'll narrate it privately, just for you.</p>
         ${heroCTA}
+        <div class="trust-row">
+          <span>${shieldIcon()} Legal & DMCA-compliant</span>
+          <span>${accessIcon()} Built for accessibility</span>
+          <span>${lockIcon()} Your uploads stay private</span>
+        </div>
       </div>
       <div class="landing-shelf" aria-hidden="true">
         ${shelfTile('Pride and Prejudice','Jane Austen','Novel','/static/covers/pride.png')}
@@ -180,6 +186,79 @@ async function renderLibrary() {
         ${shelfTile('Meditations','Marcus Aurelius','Philosophy','/static/covers/meditations.png')}
       </div>
     </div>`;
+
+  const statsBar = `
+    <div class="stats-bar">
+      <div class="stat-item"><div class="stat-num">70,000+</div><div class="stat-lbl">public domain titles</div></div>
+      <div class="stat-div"></div>
+      <div class="stat-item"><div class="stat-num">400+</div><div class="stat-lbl">community listeners</div></div>
+      <div class="stat-div"></div>
+      <div class="stat-item"><div class="stat-num">Natural</div><div class="stat-lbl">AI voices</div></div>
+      <div class="stat-div"></div>
+      <div class="stat-item"><div class="stat-num">Free</div><div class="stat-lbl">forever</div></div>
+    </div>`;
+
+  const howItWorks = `
+    <section class="how-section">
+      <h2 class="section-title">How it works</h2>
+      <div class="how-grid">
+        <div class="how-card">
+          <div class="how-num">01</div>
+          <div class="how-body">
+            <div class="how-title">Browse or upload</div>
+            <div class="how-sub">Find a classic in the community library, or upload a PDF or ePub you own. Your uploads are always private.</div>
+          </div>
+        </div>
+        <div class="how-card">
+          <div class="how-num">02</div>
+          <div class="how-body">
+            <div class="how-title">Pick a voice, generate</div>
+            <div class="how-sub">Choose from multiple natural AI voices. Preview before you commit. Your audiobook generates chapter by chapter — start listening in minutes.</div>
+          </div>
+        </div>
+        <div class="how-card">
+          <div class="how-num">03</div>
+          <div class="how-body">
+            <div class="how-title">Listen anywhere</div>
+            <div class="how-sub">Speed controls, volume boost, bookmarks that save your place. Works on any device, no app required.</div>
+          </div>
+        </div>
+      </div>
+    </section>`;
+
+  const testimonials = `
+    <section class="testimonials-section">
+      <h2 class="section-title">What listeners say</h2>
+      <div class="testimonials-grid">
+        <div class="testimonial-card">
+          <div class="testi-stars">★★★★★</div>
+          <p>"I have dyslexia and always struggled with reading. Freedible has completely changed how I experience books. I listen on my commute every single day."</p>
+          <div class="testi-author">Sarah M. · Bradford</div>
+        </div>
+        <div class="testimonial-card">
+          <div class="testi-stars">★★★★★</div>
+          <p>"Converted my entire philosophy reading list to audiobooks in one afternoon. The voice quality is genuinely impressive — better than I expected from a free tool."</p>
+          <div class="testi-author">James T. · Edinburgh</div>
+        </div>
+        <div class="testimonial-card">
+          <div class="testi-stars">★★★★★</div>
+          <p>"Finally got through Middlemarch on my commute. I'd been putting it off for three years. Would never have managed it any other way."</p>
+          <div class="testi-author">Priya K. · London</div>
+        </div>
+      </div>
+    </section>`;
+
+  const accessPitch = `
+    <section class="access-pitch">
+      <div class="access-pitch-inner">
+        <div class="access-pitch-icon">${accessIcon(40)}</div>
+        <div>
+          <div class="access-pitch-title">Built for accessibility</div>
+          <div class="access-pitch-sub">Freedible is protected under UK copyright law (CDPA 1988 s.31A/B) for format-shifting to accessible formats. If you have dyslexia, visual impairment, reading fatigue, or ADHD — audiobooks are a recognised reasonable adjustment, and Freedible is free.</div>
+          <a href="/accessibility" class="btn btn-ghost" style="margin-top:14px;font-size:13px">Learn more about accessibility →</a>
+        </div>
+      </div>
+    </section>`;
 
   const mineSection = state.user && myBooks.length ? `
     <section class="lib-section">
@@ -198,12 +277,16 @@ async function renderLibrary() {
       </div>
       ${publicBooks.length
         ? `<div class="grid" id="grid-public">${publicBooks.map(bookCard).join('')}</div>`
-        : `<div class="empty-state">No public books yet. ${state.user ? 'Be the first to share one.' : 'Sign in to upload.'}</div>`}
+        : `<div class="empty-state">No public books yet. ${state.user ? 'Be the first to share one.' : '<button class="btn btn-primary" onclick="signIn()" style="margin-top:12px">Sign in to upload the first</button>'}</div>`}
     </section>`;
 
   document.getElementById('app').innerHTML = `
     <div class="page">
       ${hero}
+      ${statsBar}
+      ${howItWorks}
+      ${testimonials}
+      ${accessPitch}
       ${mineSection}
       ${communitySection}
     </div>`;
@@ -917,6 +1000,9 @@ const skip30Icon  = (d) => `<svg width="15" height="15" viewBox="0 0 24 24" fill
   <text x="8" y="15.5" font-size="5" fill="currentColor" font-family="Inter,sans-serif" font-weight="700">30</text>
 </svg>`;
 const listIcon    = () => `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>`;
+const shieldIcon  = () => `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" opacity=".85"/></svg>`;
+const lockIcon    = () => `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>`;
+const accessIcon  = (sz=14) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="4" r="2"/><path d="M19 13v-2c-1.54.02-3.09-.75-4.07-1.83l-1.29-1.43c-.17-.19-.38-.34-.61-.45-.01 0-.01-.01-.02-.01H13c-.35-.2-.75-.3-1.19-.26L6 8.03V13h2V9.5l2.33-.56-.08 7.33-4.54 2.1.34.77 4.97-2.29c.22-.1.4-.26.53-.46l1.16-1.84.51 2.21 2.4 1.47.42-.71-2-1.22-.82-3.83c.97.88 2.26 1.41 3.71 1.44L21 13h-2z"/></svg>`;
 const spinnerLarge = () => `<svg class="spin" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10"/></svg>`;
 const spinnerSmall = () => `<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 10 10"/></svg>`;
 

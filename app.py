@@ -582,6 +582,487 @@ async def auth_logout(request: Request):
     request.session.clear()
     return {"ok": True}
 
+# ── Static pages (legal, blog) ────────────────────────────────────────────────
+from fastapi.responses import HTMLResponse
+
+_SITE_CSS = """
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/static/style.css?v=14"/>
+<script defer data-domain="freedible.co.uk" src="https://plausible.io/js/script.js"></script>
+<style>
+.prose{max-width:720px;margin:0 auto;padding:48px 24px 100px}
+.prose h1{font-size:38px;font-weight:800;letter-spacing:-.8px;margin-bottom:14px;line-height:1.12}
+.prose h2{font-size:22px;font-weight:700;margin:40px 0 12px;letter-spacing:-.3px}
+.prose h3{font-size:17px;font-weight:700;margin:26px 0 8px}
+.prose p{color:#c8c8e0;line-height:1.78;margin-bottom:16px;font-size:16px}
+.prose ul,.prose ol{color:#c8c8e0;padding-left:24px;margin-bottom:16px;line-height:1.78}
+.prose li{margin-bottom:6px}
+.prose a{color:#f17b2a;text-decoration:none}
+.prose a:hover{text-decoration:underline}
+.prose .lead{font-size:19px;color:#d8d8f0;margin-bottom:32px;line-height:1.65;font-weight:400}
+.prose .callout{background:#17172b;border:1px solid #2a2a45;border-left:4px solid #f17b2a;border-radius:0 10px 10px 0;padding:18px 22px;margin:28px 0}
+.prose .callout p{margin:0;color:#d8d8f0;font-size:15px}
+.prose hr{border:none;border-top:1px solid #2a2a45;margin:40px 0}
+.prose .tag{display:inline-block;background:#1d1d30;color:#f17b2a;border:1px solid rgba(241,123,42,.3);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-bottom:20px;letter-spacing:.6px;text-transform:uppercase}
+.bc{font-size:13px;color:#8888aa;margin-bottom:36px;display:flex;align-items:center;gap:6px}
+.bc a{color:#8888aa;text-decoration:none}.bc a:hover{color:#f0f0fa}
+.ph{background:#0e0e18;border-bottom:1px solid #2a2a45;padding:0 24px;height:62px;display:flex;align-items:center}
+.ph-logo{font-weight:800;font-size:20px;color:#f0f0fa;text-decoration:none;letter-spacing:-.5px}
+.ph-logo em{color:#f17b2a;font-style:normal}
+.pf{text-align:center;padding:36px 24px;border-top:1px solid #2a2a45;color:#8888aa;font-size:13px;margin-top:0}
+.pf a{color:#8888aa;text-decoration:none;margin:0 10px}.pf a:hover{color:#f0f0fa}
+.pf-links{display:flex;justify-content:center;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.blog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;margin-top:32px}
+.blog-card{background:#17172b;border:1px solid #2a2a45;border-radius:14px;padding:24px;text-decoration:none;display:block;transition:border-color .15s,transform .15s}
+.blog-card:hover{border-color:#f17b2a44;transform:translateY(-2px)}
+.blog-card-tag{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#f17b2a;margin-bottom:8px}
+.blog-card-title{font-size:17px;font-weight:700;color:#f0f0fa;margin-bottom:8px;line-height:1.35}
+.blog-card-desc{font-size:14px;color:#8888aa;line-height:1.6}
+.prose-date{font-size:12px;color:#8888aa;margin-bottom:24px;display:block}
+</style>"""
+
+def _ph():
+    return '<div class="ph"><a class="ph-logo" href="/">Free<em>dible</em></a></div>'
+
+def _pf():
+    return '''<footer class="pf"><div class="pf-links">
+<a href="/">Home</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a>
+<a href="/dmca">DMCA</a><a href="/accessibility">Accessibility</a><a href="/blog">Blog</a>
+</div><div>© 2025 Freedible · Made in the UK · <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a></div></footer>'''
+
+def _page(title: str, desc: str, body: str, canonical: str = "") -> HTMLResponse:
+    can = f'<link rel="canonical" href="https://www.freedible.co.uk{canonical}"/>' if canonical else ""
+    html = f"""<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{title}</title><meta name="description" content="{desc}"/>
+<meta property="og:title" content="{title}"/><meta property="og:description" content="{desc}"/>
+{can}{_SITE_CSS}</head><body>
+{_ph()}<div class="prose">{body}</div>{_pf()}</body></html>"""
+    return HTMLResponse(html)
+
+# ── Legal pages ────────────────────────────────────────────────────────────────
+@app.get("/terms")
+async def page_terms():
+    return _page("Terms of Service — Freedible",
+                 "Freedible terms of service. User responsibilities, content licensing, and platform rules.", "/terms",
+                 body="""
+<div class="tag">Legal</div>
+<h1>Terms of Service</h1>
+<p class="prose-date">Last updated: April 2025</p>
+<p class="lead">By using Freedible you agree to these terms. Please read them.</p>
+
+<h2>1. What Freedible does</h2>
+<p>Freedible is a platform that uses AI text-to-speech technology to narrate books. We provide tools to browse community-shared public domain audiobooks and to privately convert files you upload.</p>
+
+<h2>2. Your uploads — your responsibility</h2>
+<p>When you upload a file to Freedible, you warrant that:</p>
+<ul>
+<li>You are the copyright owner of the uploaded work, <strong>or</strong></li>
+<li>The work is in the public domain in your jurisdiction, <strong>or</strong></li>
+<li>You have a lawful basis to process it under applicable copyright law (including format-shifting for accessibility under CDPA 1988 s.31A/B or equivalent)</li>
+</ul>
+<p>Private uploads are processed solely for your personal listening. You must not upload content belonging to third parties for the purpose of making it publicly available on Freedible without their authorisation.</p>
+
+<h2>3. Licence you grant us</h2>
+<p>By uploading content, you grant Freedible a limited, non-exclusive, revocable licence to process and temporarily store that content solely for the purpose of generating your audiobook. We do not claim ownership of your content. Private uploads are never shared without your explicit action.</p>
+
+<h2>4. Community sharing</h2>
+<p>When you choose to publish a book to the Community Library, you confirm by attestation that you have the rights to do so. You grant other Freedible users a non-commercial licence to listen. You may retract public availability at any time.</p>
+
+<h2>5. Prohibited content</h2>
+<p>You may not upload or publish: sexually explicit material, content depicting minors in any harmful context, material that incites violence or hatred, malware or harmful code, or any content that infringes third-party rights.</p>
+
+<h2>6. Indemnification</h2>
+<p>You agree to indemnify and hold harmless Freedible, its operators, and affiliates from any claim, damage, or expense (including reasonable legal fees) arising from your use of the platform, your uploads, or your violation of these terms.</p>
+
+<h2>7. Disclaimer of warranties</h2>
+<p>Freedible is provided "as is" without warranty of any kind. We do not guarantee uptime, audio quality, or availability of any specific feature. AI narration may contain errors.</p>
+
+<h2>8. Limitation of liability</h2>
+<p>To the fullest extent permitted by law, Freedible shall not be liable for indirect, incidental, or consequential damages arising from your use of the service.</p>
+
+<h2>9. Governing law</h2>
+<p>These terms are governed by the laws of England and Wales. Any disputes shall be subject to the exclusive jurisdiction of the courts of England and Wales.</p>
+
+<h2>10. Changes</h2>
+<p>We may update these terms. Continued use after changes constitutes acceptance. We'll note the date at the top of this page.</p>
+
+<p>Questions? <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a></p>""")
+
+@app.get("/privacy")
+async def page_privacy():
+    return _page("Privacy Policy — Freedible",
+                 "How Freedible collects, stores, and uses your data. GDPR compliant, UK-based.", "/privacy",
+                 body="""
+<div class="tag">Legal</div>
+<h1>Privacy Policy</h1>
+<p class="prose-date">Last updated: April 2025</p>
+<p class="lead">We're UK-based and take your privacy seriously. Here's exactly what we collect and why.</p>
+
+<h2>Who we are</h2>
+<p>Freedible is operated from the United Kingdom. For GDPR purposes we are the data controller. Contact: <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a></p>
+
+<h2>What we collect</h2>
+<h3>When you sign in with Google</h3>
+<ul>
+<li>Your name, email address, and profile picture — provided by Google OAuth</li>
+<li>We do not receive your Google password</li>
+</ul>
+<h3>When you upload a file</h3>
+<ul>
+<li>The file itself, stored securely to generate your audiobook</li>
+<li>The generated audio files and book metadata (title, author)</li>
+<li>Private uploads are only accessible by you</li>
+</ul>
+<h3>Usage data (analytics)</h3>
+<p>We use Plausible Analytics — a privacy-first, GDPR-compliant analytics tool. Plausible does not use cookies, does not track individuals across sites, and does not collect personal data. We see aggregate page-view counts only.</p>
+
+<h2>How we use your data</h2>
+<ul>
+<li><strong>To provide the service</strong> — storing your books, generating audio, saving your listening position</li>
+<li><strong>To authenticate you</strong> — we use your email to identify your account</li>
+<li><strong>To contact you</strong> — only if you reach out to us, or in the event of a serious security or legal issue</li>
+</ul>
+<p>We do not sell your data. We do not use your data for advertising. We do not share your data with third parties except as required by law.</p>
+
+<h2>Data storage</h2>
+<p>Your data is stored on Railway (railway.app), a cloud hosting platform. Servers are located in the EU (Google Cloud). Book files and audio are stored on persistent volumes. We take reasonable technical measures to secure your data.</p>
+
+<h2>Your rights (GDPR)</h2>
+<p>As a UK/EU resident you have the right to: access your data, rectify inaccurate data, erase your data, restrict processing, and data portability. To exercise any right, email <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a> and we'll respond within 30 days.</p>
+<p>You can delete your account and all associated data by emailing us. Book deletion is also available directly in the app.</p>
+
+<h2>Cookies</h2>
+<p>We use a single session cookie to keep you signed in. It contains only your session ID — no personal data. No advertising cookies. No third-party tracking cookies.</p>
+
+<h2>Data retention</h2>
+<p>We retain your account data for as long as your account exists. Deleted books are removed from our servers within 30 days. Analytics data (aggregated, non-personal) may be retained indefinitely.</p>
+
+<h2>Children</h2>
+<p>Freedible is not directed at children under 13. We do not knowingly collect data from children.</p>
+
+<h2>Changes</h2>
+<p>We'll update the date at the top if this policy changes materially. Questions: <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a></p>""")
+
+@app.get("/dmca")
+async def page_dmca():
+    return _page("DMCA & Copyright Policy — Freedible",
+                 "How to submit a copyright takedown request to Freedible. We respond within 24 hours.", "/dmca",
+                 body="""
+<div class="tag">Legal</div>
+<h1>Copyright &amp; DMCA Policy</h1>
+<p class="prose-date">Last updated: April 2025</p>
+<p class="lead">Freedible respects intellectual property rights. We have a clear, responsive process for copyright concerns — this is our actual legal shield and we take it seriously.</p>
+
+<div class="callout"><p><strong>To report infringing content:</strong> email <a href="mailto:dmca@freedible.co.uk">dmca@freedible.co.uk</a> with the information below. We commit to a 24-hour acknowledgement and action within 72 hours on valid notices.</p></div>
+
+<h2>Our platform model</h2>
+<p>Freedible operates as a platform (host), not a publisher. Users upload content; we process it to generate audio. Private uploads are only accessible to the uploader. Public content has been attested by the uploader as either owned by them or in the public domain.</p>
+<p>We rely on the safe harbour provisions of the Electronic Commerce (EC Directive) Regulations 2002 (UK) and cooperate fully with the DMCA (US) notice-and-takedown framework.</p>
+
+<h2>How to submit a takedown notice</h2>
+<p>Email <a href="mailto:dmca@freedible.co.uk">dmca@freedible.co.uk</a> with the following:</p>
+<ol>
+<li><strong>Identification of the copyrighted work</strong> — the title, author, and original publication details</li>
+<li><strong>Identification of the infringing material</strong> — the URL on Freedible where the material appears</li>
+<li><strong>Your contact information</strong> — name, email, postal address, phone number</li>
+<li><strong>A statement of good faith</strong> — "I have a good faith belief that use of the material in the manner complained of is not authorised by the copyright owner, its agent, or the law"</li>
+<li><strong>A statement of accuracy</strong> — "I swear, under penalty of perjury, that the information in the notification is accurate, and that I am the copyright owner or am authorised to act on behalf of the copyright owner"</li>
+<li><strong>Your signature</strong> — typed name is sufficient for email notices</li>
+</ol>
+
+<h2>What happens next</h2>
+<ul>
+<li><strong>Within 24 hours:</strong> We acknowledge your notice by email</li>
+<li><strong>Within 72 hours:</strong> We investigate and, if the notice is valid, remove or disable access to the content</li>
+<li><strong>We notify the uploader</strong> that their content has been removed and provide them the opportunity to submit a counter-notice</li>
+</ul>
+
+<h2>Counter-notices</h2>
+<p>If you believe content was removed in error, you may submit a counter-notice to <a href="mailto:dmca@freedible.co.uk">dmca@freedible.co.uk</a> including: identification of the removed content, a statement that you consent to the jurisdiction of the courts, and a statement under penalty of perjury that the content was removed by mistake or misidentification.</p>
+
+<h2>Repeat infringers</h2>
+<p>Freedible will terminate the accounts of users who are determined to be repeat infringers.</p>
+
+<h2>Public domain &amp; accessibility</h2>
+<p>Works in the public domain cannot be the subject of a valid copyright claim. Under UK law (CDPA 1988 s.31A/B), format-shifting for accessibility purposes by qualifying persons is also lawful. If you believe a takedown notice was filed in bad faith, please let us know.</p>
+
+<p>All copyright questions: <a href="mailto:dmca@freedible.co.uk">dmca@freedible.co.uk</a></p>""")
+
+@app.get("/accessibility")
+async def page_accessibility():
+    return _page("Accessibility — Freedible",
+                 "Freedible is built for people with dyslexia, visual impairment, reading fatigue, and ADHD. Free, legal, and protected under UK law.", "/accessibility",
+                 body="""
+<div class="tag">Accessibility</div>
+<h1>Freedible is built for accessibility</h1>
+<p class="lead">If books have ever felt out of reach — because of dyslexia, vision, fatigue, or attention — this is for you. Freedible turns any book into a natural audiobook, free, with no hoops to jump through.</p>
+
+<h2>Who we're built for</h2>
+<p>We designed Freedible with these listeners at the centre:</p>
+<ul>
+<li><strong>Dyslexia</strong> — estimated 10% of the UK population. Audiobooks remove the visual decoding barrier entirely, letting you focus on the ideas.</li>
+<li><strong>Visual impairment</strong> — whether you're partially sighted or fully blind, an audiobook is often the most practical way to access a text. Freedible works with screen readers and keyboard navigation.</li>
+<li><strong>Reading fatigue</strong> — chronic illness, long-COVID, migraines, and eye strain make sustained reading painful. Listening is a direct alternative.</li>
+<li><strong>ADHD</strong> — many people with ADHD find audio easier to focus on than text, especially with speed control (try 1.25× or 1.5×).</li>
+<li><strong>Long commutes &amp; busy lives</strong> — not a disability, but a very real reason to want books in audio form.</li>
+</ul>
+
+<h2>What UK law says</h2>
+<p>The Copyright, Designs and Patents Act 1988 (CDPA), sections 31A and 31B, provide an explicit exception for format-shifting copyrighted works into accessible formats for people with a "print disability." The UK has also ratified the Marrakesh Treaty, which extends these rights internationally.</p>
+<p>If you have dyslexia, a visual impairment, or another condition that makes reading standard text difficult, converting a book you legally own into an audiobook is <strong>protected under UK law</strong>. This is not a legal grey area — it is an explicit statutory exception.</p>
+
+<div class="callout"><p><strong>In plain English:</strong> if you have a print disability and you own the book, you are legally entitled to convert it to audio for your own use. Freedible is a tool to do exactly that.</p></div>
+
+<h2>How Freedible helps</h2>
+<ul>
+<li><strong>Natural AI voices</strong> — not the robotic monotone of older TTS. Modern voices have natural cadence, pauses, and expression.</li>
+<li><strong>Speed control</strong> — listen at 0.75× to 2.0×. Many people with dyslexia actually prefer slightly faster audio.</li>
+<li><strong>Volume boost</strong> — go beyond 100% if you need it.</li>
+<li><strong>Bookmarks</strong> — your position is saved automatically every 5 seconds.</li>
+<li><strong>Chapter navigation</strong> — skip to any chapter, or use the chapter panel during playback.</li>
+<li><strong>No app</strong> — works in any browser on any device.</li>
+</ul>
+
+<h2>Screen reader &amp; keyboard support</h2>
+<p>Freedible is built on semantic HTML. The player responds to standard media keyboard shortcuts. If you find any accessibility barrier, please email <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a> — we will fix it.</p>
+
+<h2>Cost</h2>
+<p>Freedible is free. It will remain free. Accessibility should not be a premium feature.</p>
+
+<h2>Recommended reads</h2>
+<p>If you're new to audiobooks and not sure where to start, our <a href="/blog/audiobooks-dyslexia-visual-impairment">guide to audiobooks for dyslexia and visual impairment</a> has practical recommendations.</p>
+
+<p>Questions or access needs: <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a></p>""")
+
+# ── Blog ───────────────────────────────────────────────────────────────────────
+_BLOG_POSTS = {
+    "best-free-public-domain-audiobooks": {
+        "title": "The 12 Best Free Public Domain Audiobooks to Listen to in 2025",
+        "tag": "Public Domain",
+        "desc": "Discover the best free public domain audiobooks you can listen to right now — from Jane Austen to Marcus Aurelius, all narrated with natural AI voices on Freedible.",
+        "date": "April 2025",
+        "body": """
+<div class="tag">Public Domain</div>
+<h1>The 12 Best Free Public Domain Audiobooks to Listen to in 2025</h1>
+<span class="prose-date">April 2025 · 8 min read</span>
+<p class="lead">Public domain books are works whose copyright has expired — they belong to everyone, forever. That means you can read, share, adapt, and listen to them legally, completely free. Here are twelve of the best.</p>
+
+<h2>What is the public domain?</h2>
+<p>In the UK, copyright lasts for the author's lifetime plus 70 years. In the US, works published before 1928 are in the public domain. This means the greatest literature of the 19th century and much of the early 20th is freely available — including some of the most beloved books ever written.</p>
+
+<h2>The list</h2>
+
+<h3>1. Pride and Prejudice — Jane Austen (1813)</h3>
+<p>Perhaps the most re-read novel in the English language, and for good reason. Austen's wit is as sharp in audio as on the page — arguably sharper, because you hear the irony. Perfect for commutes.</p>
+
+<h3>2. Wuthering Heights — Emily Brontë (1847)</h3>
+<p>Darker and stranger than most people expect. Brontë's gothic moorland novel has a fractured, frame-within-frame structure that rewards listening. The prose is dense in a way that audio actually makes easier.</p>
+
+<h3>3. Meditations — Marcus Aurelius (c. 170 AD)</h3>
+<p>The private journal of a Roman emperor. Written in Greek, never intended for publication. One of the most practical philosophy books ever written — and short enough to finish on a long train journey.</p>
+
+<h3>4. The Art of War — Sun Tzu (c. 500 BC)</h3>
+<p>Thirteen short chapters on strategy that have remained relevant for 2,500 years. At under two hours as an audiobook, there's no excuse not to.</p>
+
+<h3>5. The Adventures of Sherlock Holmes — Arthur Conan Doyle (1892)</h3>
+<p>Short stories are ideal for audio — each one is self-contained, typically under 30 minutes. Doyle's plotting is as tight now as it was in 1892.</p>
+
+<h3>6. Dracula — Bram Stoker (1897)</h3>
+<p>Told entirely through journal entries, letters, and newspaper clippings — a format that translates beautifully to audio narration. Genuinely unsettling, even now.</p>
+
+<h3>7. The Picture of Dorian Gray — Oscar Wilde (1890)</h3>
+<p>Wilde's only novel. Witty, dark, and full of epigrams that land differently when heard aloud. The dialogue, in particular, is extraordinary.</p>
+
+<h3>8. Crime and Punishment — Fyodor Dostoevsky (1866)</h3>
+<p>The definitive psychological thriller, written 150 years before the genre existed. Long, but the tension never drops. Ideal for long commutes.</p>
+
+<h3>9. Moby Dick — Herman Melville (1851)</h3>
+<p>Famously difficult to read on the page; surprisingly compelling as audio. The cetological chapters (on whale anatomy) that put so many readers off become meditative rather than boring when listened to.</p>
+
+<h3>10. Nineteen Eighty-Four — George Orwell (1949)</h3>
+<p>Now in the public domain in the UK (Orwell died in 1950; 70 years expired in 2020). The most important political novel of the 20th century, and unfortunately more relevant than ever.</p>
+
+<h3>11. Don Quixote — Miguel de Cervantes (1605)</h3>
+<p>Often called the first modern novel. Funnier than you'd expect, and the first work of fiction to seriously interrogate the nature of fiction itself. The audiobook runs about 40 hours — plan accordingly.</p>
+
+<h3>12. The Great Gatsby — F. Scott Fitzgerald (1925)</h3>
+<p>Now public domain in both the US and UK. Short (five hours as an audiobook), precise, and devastating. One of the few novels where almost every sentence rewards rereading — or re-listening.</p>
+
+<h2>How to listen for free</h2>
+<p>All of these books are available on Freedible. You can upload a public domain ePub or PDF and generate a natural-sounding audiobook in minutes — choosing from multiple AI voices. It's completely free.</p>
+<p><a href="/">Start listening on Freedible →</a></p>""",
+    },
+    "convert-epub-pdf-to-audiobook-free": {
+        "title": "How to Convert an ePub or PDF to Audiobook Free (2025 Guide)",
+        "tag": "How-To",
+        "desc": "Step-by-step guide to converting any ePub or PDF into a natural-sounding audiobook for free using Freedible's AI narration.",
+        "date": "April 2025",
+        "body": """
+<div class="tag">How-To</div>
+<h1>How to Convert an ePub or PDF to Audiobook Free (2025 Guide)</h1>
+<span class="prose-date">April 2025 · 5 min read</span>
+<p class="lead">You have a book. You want to listen to it. Here's exactly how to turn any ePub or PDF into a high-quality audiobook in under five minutes — for free.</p>
+
+<h2>What you need</h2>
+<ul>
+<li>A free Freedible account (sign in with Google — takes 10 seconds)</li>
+<li>The book as an ePub or PDF file</li>
+<li>That's it</li>
+</ul>
+
+<h2>Step 1: Get your book file</h2>
+<p>If you've bought an ebook from a retailer like Kobo or directly from a publisher, you likely already have an ePub or PDF. Most ebook platforms let you download DRM-free versions of your purchases, especially for public domain titles.</p>
+<p>For public domain books, <a href="https://www.gutenberg.org" target="_blank" rel="noopener">Project Gutenberg</a> and <a href="https://standardebooks.org" target="_blank" rel="noopener">Standard Ebooks</a> are the best sources — Standard Ebooks in particular produces beautifully typeset ePub files that convert extremely well.</p>
+
+<div class="callout"><p><strong>Legal note:</strong> Only convert books you own, or that are in the public domain. If you have a print disability, UK law (CDPA 1988 s.31A/B) also permits format-shifting books you've legally acquired. See our <a href="/accessibility">accessibility page</a> for details.</p></div>
+
+<h2>Step 2: Sign in to Freedible</h2>
+<p>Go to <a href="/">freedible.co.uk</a> and click "Get started free." Sign in with your Google account — no new password to remember.</p>
+
+<h2>Step 3: Upload your file</h2>
+<p>Click "Upload a Book" (or "Add a Book" in the header). Drag and drop your ePub or PDF into the upload area, or click to browse. Files up to 40MB are supported. The upload takes a few seconds.</p>
+<p>Freedible reads the book structure automatically — chapters, title, author. For ePubs, it uses the book's own chapter structure. For PDFs, it detects chapter headings in the text.</p>
+
+<h2>Step 4: Choose a voice</h2>
+<p>You'll see a voice selector with multiple options. Hit "Preview" to hear a 5-second sample of each voice before committing. Different voices suit different books — a warmer voice for fiction, a crisper one for non-fiction.</p>
+
+<h2>Step 5: Generate and listen</h2>
+<p>Click "Generate Audiobook." The first chapter will be ready to play within about a minute. Freedible generates chapter by chapter, so you can start listening immediately while the rest generates in the background.</p>
+<p>Your progress is saved automatically — come back any time and it remembers where you were.</p>
+
+<h2>Tips for the best results</h2>
+<ul>
+<li><strong>ePub beats PDF</strong> — ePubs have structured chapter information; PDFs don't always, especially scans</li>
+<li><strong>Standard Ebooks are the best source</strong> — their ePubs are clean, well-structured, and generate perfectly</li>
+<li><strong>Try 1.25× speed</strong> — most people find a slight speed boost makes listening more engaging</li>
+<li><strong>Use bookmarks</strong> — your place is saved automatically, but you can also bookmark manually</li>
+</ul>
+
+<h2>What about sharing?</h2>
+<p>By default, your book is private — only you can see and hear it. If you want to share a public domain book with the community, you can publish it to the Community Library. You'll be asked to confirm you have the rights to do so.</p>
+
+<p><a href="/">Try it now at Freedible →</a></p>""",
+    },
+    "audiobooks-dyslexia-visual-impairment": {
+        "title": "Audiobooks for Dyslexia and Visual Impairment: A Complete UK Guide",
+        "tag": "Accessibility",
+        "desc": "How audiobooks help with dyslexia, visual impairment, ADHD, and reading fatigue. Includes UK legal protections for format-shifting under the CDPA 1988.",
+        "date": "April 2025",
+        "body": """
+<div class="tag">Accessibility</div>
+<h1>Audiobooks for Dyslexia and Visual Impairment: A Complete UK Guide</h1>
+<span class="prose-date">April 2025 · 7 min read</span>
+<p class="lead">Around 10% of the UK population has dyslexia. Millions more have visual impairments, ADHD, chronic illness, or reading fatigue. Audiobooks are often the best — and sometimes the only — way to access a text. Here's what you need to know.</p>
+
+<h2>How audiobooks help with dyslexia</h2>
+<p>Dyslexia is a difference in how the brain processes written language — it's not a problem with intelligence or comprehension. Audiobooks remove the visual decoding step entirely, allowing full access to complex ideas and narratives without the friction of decoding text.</p>
+<p>Research consistently shows that listening comprehension in dyslexic individuals is often equal to or exceeds that of non-dyslexic readers. The barrier is the text, not the understanding.</p>
+<p>Speed control is particularly useful: many dyslexic listeners prefer slightly faster audio (1.25× to 1.5×), which keeps the brain engaged without losing comprehension. Freedible lets you set any speed from 0.75× to 2×.</p>
+
+<h2>Visual impairment and print disability</h2>
+<p>The term "print disability" in UK law covers: blindness, partial sight, and any condition that prevents a person from reading standard printed text — including dyslexia, physical disabilities that prevent holding a book, and some cognitive conditions.</p>
+<p>If you have a print disability, audiobooks aren't just useful — they're often the primary means of accessing literature and information.</p>
+
+<h2>ADHD and reading fatigue</h2>
+<p>Many people with ADHD find sustained silent reading difficult, particularly for long books, even when they're highly intelligent and motivated. Audio engages a different attention mechanism. Many ADHD readers find they can listen to a 400-page book that would take months to read on paper.</p>
+<p>Reading fatigue — from chronic illness, long-COVID, migraines, post-surgery recovery, or simply a demanding screen-heavy job — is a real barrier that audiobooks address directly.</p>
+
+<h2>What UK law says</h2>
+<p>The Copyright, Designs and Patents Act 1988, sections 31A and 31B (as amended by the Enterprise and Regulatory Reform Act 2013 and SI 2014/1384), provide explicit exceptions allowing people with a "print disability" to make accessible copies of works they have lawfully acquired.</p>
+<p>Specifically:</p>
+<ul>
+<li>A person with a print disability may make an accessible format copy of a work for their personal use</li>
+<li>Designated bodies (charities, libraries) may make and distribute accessible copies</li>
+<li>These exceptions apply even when the work is still in copyright</li>
+</ul>
+<p>The UK has also ratified the Marrakesh Treaty to Facilitate Access to Published Works for Persons Who Are Blind, Visually Impaired, or Otherwise Print Disabled — an international framework that reinforces these rights.</p>
+
+<div class="callout"><p><strong>In plain English:</strong> If you have dyslexia, a visual impairment, or another print disability — and you've legally acquired the book — converting it to an audiobook for your personal use is protected under UK law. Freedible is a tool to do exactly that.</p></div>
+
+<h2>Practical recommendations</h2>
+<h3>For fiction</h3>
+<p>Start with something you've always wanted to read but felt put off by length. Wuthering Heights, Pride and Prejudice, and Crime and Punishment are all freely available as public domain audiobooks on Freedible. The Sherlock Holmes short stories are ideal if you're new to audio — each story is under 30 minutes.</p>
+<h3>For non-fiction</h3>
+<p>Meditations by Marcus Aurelius is short, profound, and reads beautifully aloud. The Art of War is under two hours. Both are freely available.</p>
+<h3>For your own books</h3>
+<p>Upload any ePub or PDF you legally own to Freedible — it converts privately, for your ears only. Standard Ebooks (standardebooks.org) produces the cleanest public domain ePubs available.</p>
+
+<h2>Tools that help</h2>
+<p>Freedible includes several features designed with accessibility in mind:</p>
+<ul>
+<li><strong>Speed control</strong> — tap any speed from 0.75× to 2×</li>
+<li><strong>Volume boost</strong> — beyond the browser's normal 100% limit</li>
+<li><strong>Automatic bookmarks</strong> — saved every 5 seconds</li>
+<li><strong>OS media controls</strong> — your phone's lock screen controls work</li>
+<li><strong>No app required</strong> — works in any browser</li>
+</ul>
+
+<p>Questions about accessibility: <a href="mailto:hello@freedible.co.uk">hello@freedible.co.uk</a></p>
+<p><a href="/accessibility">See our full accessibility page →</a> · <a href="/">Start listening on Freedible →</a></p>""",
+    },
+    "ai-audiobook-narration-2025": {
+        "title": "AI Audiobook Narration in 2025: Is It Actually Good Enough?",
+        "tag": "AI Narration",
+        "desc": "An honest look at how AI audiobook narration compares to human narrators in 2025. Where it works, where it falls short, and what's changed.",
+        "date": "April 2025",
+        "body": """
+<div class="tag">AI Narration</div>
+<h1>AI Audiobook Narration in 2025: Is It Actually Good Enough?</h1>
+<span class="prose-date">April 2025 · 6 min read</span>
+<p class="lead">The honest answer: it depends on the book. But the gap between AI and professional human narration has closed dramatically in the last two years. Here's an honest assessment.</p>
+
+<h2>What changed</h2>
+<p>For most of the 2010s, text-to-speech was obviously robotic. Flat intonation, mispronounced names, and no sense of rhythm made it useful for navigation instructions but uncomfortable for 8 hours of Tolstoy.</p>
+<p>The shift started around 2022 with neural TTS systems, and accelerated sharply in 2023–2024. Models like Kokoro (which Freedible uses) are trained on diverse speech data and produce natural prosody — the rhythm and emphasis that makes speech feel human.</p>
+
+<h2>Where AI narration is genuinely good</h2>
+<p><strong>Non-fiction and essays.</strong> Philosophy, history, self-help, science writing — content where the ideas matter more than dramatic performance. Meditations by Marcus Aurelius sounds excellent in AI narration. So does most popular non-fiction.</p>
+<p><strong>Classic literature.</strong> Austen, Dickens, Dostoevsky — the prose is dense and the emotional register is relatively consistent. AI handles this well.</p>
+<p><strong>Short stories.</strong> The Sherlock Holmes stories, Chekhov, Poe — self-contained, plot-driven, relatively even in tone. AI narration works very well here.</p>
+<p><strong>Any book you otherwise wouldn't listen to at all.</strong> If the choice is AI narration or not hearing the book, AI narration wins every time.</p>
+
+<h2>Where human narration still wins</h2>
+<p><strong>Character-heavy dialogue.</strong> A skilled human narrator gives each character a distinct voice. Current AI voices are consistent but uniform — everyone sounds like the same narrator.</p>
+<p><strong>Poetry.</strong> Metre, rhythm, breath, and silence are everything in poetry. AI can recite; it can't yet perform.</p>
+<p><strong>Humour.</strong> Comic timing requires genuine understanding of what's funny. AI gets cadence wrong in ways that flatten jokes.</p>
+<p><strong>Very long books.</strong> For a 40-hour audiobook, voice variation and performance quality matter more. A good human narrator carries you through; AI can become monotonous.</p>
+
+<h2>What Freedible uses</h2>
+<p>Freedible uses Kokoro, an open-source neural TTS model that runs on GPU. It offers multiple voice options — different characters, accents, and tones — and produces natural sentence rhythm and paragraph pacing.</p>
+<p>The voice preview feature lets you hear 5 seconds of each voice before committing, so you can choose what suits the book. Warmer voices for fiction; crisper voices for non-fiction.</p>
+
+<h2>The practical conclusion</h2>
+<p>If you're deciding between AI narration and not listening to the book, the answer is simple: AI narration. If you're deciding between AI narration and a professionally produced audiobook by a skilled narrator for a novel you love, the professional narrator will almost always be better.</p>
+<p>But for the vast majority of books — particularly public domain classics, non-fiction, and any book that doesn't yet have a professionally produced version — AI narration in 2025 is genuinely good enough.</p>
+<p>Hear it for yourself: <a href="/">listen to a sample on Freedible →</a></p>""",
+    },
+}
+
+@app.get("/blog")
+async def blog_index():
+    cards = "".join(f"""
+    <a class="blog-card" href="/blog/{slug}">
+      <div class="blog-card-tag">{p['tag']}</div>
+      <div class="blog-card-title">{p['title']}</div>
+      <div class="blog-card-desc">{p['desc']}</div>
+    </a>""" for slug, p in _BLOG_POSTS.items())
+    return _page("Blog — Freedible",
+                 "Articles on public domain audiobooks, AI narration, accessibility, and listening well.", "/blog",
+                 body=f"""
+<h1>Freedible Blog</h1>
+<p class="lead">Guides, recommendations, and thinking on audiobooks, AI narration, and accessibility.</p>
+<div class="blog-grid">{cards}</div>""")
+
+@app.get("/blog/{slug}")
+async def blog_post(slug: str):
+    post = _BLOG_POSTS.get(slug)
+    if not post:
+        raise HTTPException(404, "Post not found")
+    bc = f'<nav class="bc"><a href="/">Home</a> <span>/</span> <a href="/blog">Blog</a> <span>/</span> {post["tag"]}</nav>'
+    return _page(f"{post['title']} — Freedible", post["desc"], bc + post["body"], f"/blog/{slug}")
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.get("/")
 async def root(): return FileResponse(str(STATIC / "index.html"))

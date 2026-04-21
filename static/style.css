@@ -220,6 +220,58 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
 .lib-h1{font-size:28px;font-weight:800;letter-spacing:-.7px}
 .lib-meta{font-size:13px;color:var(--muted)}
 .lib-section{margin-top:56px}
+
+/* ── Landing page kicker + trust row ── */
+.landing-kicker{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:16px;opacity:.9}
+.landing-text h1{font-size:50px;font-weight:800;letter-spacing:-1.5px;line-height:1.05;margin-bottom:22px}
+.landing-text h1 em{font-style:normal;color:var(--accent)}
+.trust-row{display:flex;flex-wrap:wrap;gap:16px;margin-top:24px}
+.trust-row span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:500}
+
+/* ── Stats bar ── */
+.stats-bar{display:flex;align-items:center;justify-content:center;gap:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px 32px;margin:48px 0;flex-wrap:wrap}
+.stat-item{text-align:center;padding:0 32px}
+.stat-num{font-size:28px;font-weight:800;letter-spacing:-.5px;color:var(--text)}
+.stat-lbl{font-size:12px;color:var(--muted);margin-top:3px;font-weight:500;letter-spacing:.3px}
+.stat-div{width:1px;height:40px;background:var(--border)}
+
+/* ── How it works ── */
+.how-section{margin:64px 0}
+.section-title{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-bottom:32px}
+.how-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.how-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px;display:flex;gap:20px;align-items:flex-start;transition:border-color .2s}
+.how-card:hover{border-color:var(--accent)}
+.how-num{font-size:32px;font-weight:800;color:var(--accent);opacity:.35;flex-shrink:0;line-height:1}
+.how-title{font-size:16px;font-weight:700;margin-bottom:8px}
+.how-sub{font-size:14px;color:var(--muted);line-height:1.65}
+
+/* ── Testimonials ── */
+.testimonials-section{margin:64px 0}
+.testimonials-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.testimonial-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px}
+.testi-stars{color:#f5a623;font-size:14px;margin-bottom:14px;letter-spacing:2px}
+.testimonial-card p{font-size:15px;color:#c8c8e0;line-height:1.7;margin-bottom:16px;font-style:italic}
+.testi-author{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.4px;text-transform:uppercase}
+
+/* ── Accessibility pitch ── */
+.access-pitch{background:linear-gradient(135deg,#17172b 0%,#1d1d30 100%);border:1px solid var(--border);border-radius:20px;padding:36px;margin:64px 0}
+.access-pitch-inner{display:flex;gap:28px;align-items:flex-start}
+.access-pitch-icon{flex-shrink:0;color:var(--accent);margin-top:4px}
+.access-pitch-title{font-size:20px;font-weight:800;margin-bottom:10px;letter-spacing:-.3px}
+.access-pitch-sub{font-size:15px;color:var(--muted);line-height:1.7;max-width:600px}
+
+/* ── Footer ── */
+.site-footer{background:var(--surface);border-top:1px solid var(--border);padding:56px 24px 0}
+.site-footer-inner{max-width:1200px;margin:0 auto;display:flex;gap:48px;justify-content:space-between;flex-wrap:wrap;padding-bottom:48px}
+.footer-brand{flex-shrink:0}
+.footer-logo{font-size:22px;font-weight:800;letter-spacing:-.5px;color:var(--text);margin-bottom:6px}
+.footer-tagline{font-size:13px;color:var(--muted)}
+.footer-links{display:flex;gap:40px;flex-wrap:wrap}
+.footer-col{display:flex;flex-direction:column;gap:10px}
+.footer-col-title{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.footer-col a{font-size:14px;color:var(--muted);text-decoration:none;transition:color .15s}
+.footer-col a:hover{color:var(--text)}
+.footer-bottom{max-width:1200px;margin:0 auto;padding:20px 0 28px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)}
 .empty-state{color:var(--muted);font-size:14px;padding:32px 0;text-align:center;border:1px dashed var(--border);border-radius:10px}
 
 /* Header right cluster: sign-in / user menu */
@@ -268,12 +320,23 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
   .landing-shelf{display:none}
 }
 
+@media(max-width:960px){
+  .how-grid{grid-template-columns:1fr}
+  .testimonials-grid{grid-template-columns:1fr}
+  .stats-bar{gap:24px 0}
+  .stat-div{display:none}
+  .stat-item{width:50%;padding:8px 0}
+  .access-pitch-inner{flex-direction:column;gap:16px}
+}
 @media(max-width:768px){
   .site-header-inner{padding:0 16px}
   .wordmark{font-size:20px}
   .lib-h1{font-size:22px}
-  .landing-text h1{font-size:36px;line-height:1.1}
+  .landing-text h1{font-size:36px;line-height:1.08}
   .landing-text p{font-size:15px}
+  .site-footer-inner{gap:32px}
+  .footer-links{gap:24px}
+  .section-title{font-size:22px}
   .player{padding:10px 12px;gap:10px}
   .player-right{display:none}
   .player-info{min-width:0;max-width:44%}
@@ -287,7 +350,10 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
   .book-card{font-size:13px}
 }
 @media(max-width:420px){
-  .landing-text h1{font-size:30px}
+  .landing-text h1{font-size:28px}
+  .stats-bar{padding:20px 16px}
+  .stat-item{width:100%}
+  .footer-links{flex-direction:column;gap:20px}
   .btn-primary{padding:9px 14px;font-size:13px}
   .voice-row{flex-direction:column;align-items:stretch}
   .voice-row .btn{width:100%}
