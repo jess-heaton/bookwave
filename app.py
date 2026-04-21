@@ -645,8 +645,8 @@ def _page(title: str, desc: str, body: str, canonical: str = "") -> HTMLResponse
 @app.get("/terms")
 async def page_terms():
     return _page("Terms of Service — Freedible",
-                 "Freedible terms of service. User responsibilities, content licensing, and platform rules.", "/terms",
-                 body="""
+                 "Freedible terms of service. User responsibilities, content licensing, and platform rules.",
+                 canonical="/terms", body="""
 <div class="tag">Legal</div>
 <h1>Terms of Service</h1>
 <p class="prose-date">Last updated: April 2025</p>
@@ -693,8 +693,8 @@ async def page_terms():
 @app.get("/privacy")
 async def page_privacy():
     return _page("Privacy Policy — Freedible",
-                 "How Freedible collects, stores, and uses your data. GDPR compliant, UK-based.", "/privacy",
-                 body="""
+                 "How Freedible collects, stores, and uses your data. GDPR compliant, UK-based.",
+                 canonical="/privacy", body="""
 <div class="tag">Legal</div>
 <h1>Privacy Policy</h1>
 <p class="prose-date">Last updated: April 2025</p>
@@ -748,8 +748,8 @@ async def page_privacy():
 @app.get("/dmca")
 async def page_dmca():
     return _page("DMCA & Copyright Policy — Freedible",
-                 "How to submit a copyright takedown request to Freedible. We respond within 24 hours.", "/dmca",
-                 body="""
+                 "How to submit a copyright takedown request to Freedible. We respond within 24 hours.",
+                 canonical="/dmca", body="""
 <div class="tag">Legal</div>
 <h1>Copyright &amp; DMCA Policy</h1>
 <p class="prose-date">Last updated: April 2025</p>
@@ -793,8 +793,8 @@ async def page_dmca():
 @app.get("/accessibility")
 async def page_accessibility():
     return _page("Accessibility — Freedible",
-                 "Freedible is built for people with dyslexia, visual impairment, reading fatigue, and ADHD. Free, legal, and protected under UK law.", "/accessibility",
-                 body="""
+                 "Freedible is built for people with dyslexia, visual impairment, reading fatigue, and ADHD. Free, legal, and protected under UK law.",
+                 canonical="/accessibility", body="""
 <div class="tag">Accessibility</div>
 <h1>Freedible is built for accessibility</h1>
 <p class="lead">If books have ever felt out of reach — because of dyslexia, vision, fatigue, or attention — this is for you. Freedible turns any book into a natural audiobook, free, with no hoops to jump through.</p>
@@ -1049,8 +1049,8 @@ async def blog_index():
       <div class="blog-card-desc">{p['desc']}</div>
     </a>""" for slug, p in _BLOG_POSTS.items())
     return _page("Blog — Freedible",
-                 "Articles on public domain audiobooks, AI narration, accessibility, and listening well.", "/blog",
-                 body=f"""
+                 "Articles on public domain audiobooks, AI narration, accessibility, and listening well.",
+                 canonical="/blog", body=f"""
 <h1>Freedible Blog</h1>
 <p class="lead">Guides, recommendations, and thinking on audiobooks, AI narration, and accessibility.</p>
 <div class="blog-grid">{cards}</div>""")
