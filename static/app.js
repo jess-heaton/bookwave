@@ -83,7 +83,7 @@ function setGain(v) { getGain().gain.value = parseFloat(v); }
 
 // ── Bookmarks ─────────────────────────────────────────────────────────────────
 function saveBookmark(bookId, chapterId, time) {
-  try { localStorage.setItem('bm_' + bookId, JSON.stringify({ chapterId, time: Math.floor(time) })); } catch {}
+  try { localStorage.setItem('bm_' + bookId, JSON.stringify({ chapterId, time: Math.floor(time), savedAt: Date.now() })); } catch {}
 }
 function loadBookmark(bookId) {
   try { return JSON.parse(localStorage.getItem('bm_' + bookId)) || null; } catch { return null; }
@@ -150,6 +150,70 @@ function statusBadge(s) {
   }[s] || `<span class="badge b-blue">${s}</span>`;
 }
 
+// ── Netflix-style shelf rows ──────────────────────────────────────────────────
+const SHELF_CATEGORIES = [
+  { label: 'Horror & Gothic',          keys: ['Frankenstein','Dracula','Jekyll','Dorian Gray','Hound of the Baskervilles'] },
+  { label: 'Mystery & Detective',      keys: ['Sherlock Holmes','Hound of the','Monte Cristo','Crime and Punishment'] },
+  { label: 'Philosophy & Wisdom',      keys: ['Meditations','Art of War','The Prince','The Republic','Zarathustra','A Modest Proposal','The Odyssey'] },
+  { label: 'Russian Masters',          keys: ['Anna Karenina','War and Peace','Brothers Karamazov','Crime and Punishment'] },
+  { label: 'Science Fiction',          keys: ['Time Machine','War of the Worlds','Twenty Thousand Leagues','Around the World'] },
+  { label: 'American Classics',        keys: ['Great Gatsby','Scarlet Letter','Moby Dick','Tom Sawyer','Huckleberry Finn','Uncle Tom','Call of the Wild','Wizard of Oz','Little Women'] },
+  { label: 'World Literature',         keys: ['Don Quixote','Les Misér','Metamorphosis','Odyssey','Les Mise'] },
+  { label: 'Classic Literature',       keys: [] },  // catch-all
+];
+
+function categorizeShelves(books) {
+  const shelves = [];
+  const used = new Set();
+  for (const cat of SHELF_CATEGORIES) {
+    const matched = cat.keys.length === 0
+      ? books.filter(b => !used.has(b.id))
+      : books.filter(b => !used.has(b.id) && cat.keys.some(k => b.title.includes(k)));
+    if (matched.length >= 2 || (cat.keys.length === 0 && matched.length > 0)) {
+      matched.forEach(b => used.add(b.id));
+      shelves.push({ label: cat.label, books: matched });
+    }
+  }
+  return shelves;
+}
+
+function getContinueListening(books) {
+  let best = null;
+  for (const book of books) {
+    const bm = loadBookmark(book.id);
+    if (bm) {
+      if (!best || (bm.savedAt || 0) > (best.bm.savedAt || 0)) best = { book, bm };
+    }
+  }
+  return best;
+}
+
+function nfCard(book) {
+  const hasCover = book.cover && book.cover !== '';
+  const initial = (book.title || '?').charAt(0);
+  const coverEl = hasCover
+    ? `<img src="${esc(book.cover)}" alt="${esc(book.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='flex')"/><div class="nf-ph" style="display:none">${initial}</div>`
+    : `<div class="nf-ph">${initial}</div>`;
+  return `<div class="nf-card" onclick="navigate('book','${book.id}');push('#/book/${book.id}')">
+    <div class="nf-cover">
+      ${coverEl}
+      <div class="nf-overlay"><div class="nf-status">${statusBadge(book.status)}</div></div>
+    </div>
+    <div class="nf-meta">
+      <div class="nf-title">${esc(book.title)}</div>
+      ${book.author ? `<div class="nf-author">${esc(book.author)}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function shelfRow(label, books) {
+  if (!books.length) return '';
+  return `<section class="shelf-row">
+    <div class="shelf-row-head"><h2 class="shelf-row-label">${esc(label)}</h2></div>
+    <div class="shelf-track">${books.map(nfCard).join('')}</div>
+  </section>`;
+}
+
 // ── Library ───────────────────────────────────────────────────────────────────
 async function renderLibrary() {
   document.title = 'Freedible — Every classic, read aloud. Or upload your own.';
@@ -160,6 +224,21 @@ async function renderLibrary() {
     api('GET', '/api/stats').catch(() => ({ books: 0, hours: 0 })),
   ]);
   state.books = [...publicBooks, ...myBooks.filter(b => !publicBooks.some(p => p.id === b.id))];
+
+  // Continue listening bar
+  const cont = getContinueListening(state.books);
+  const continueBar = cont ? `
+    <div class="continue-bar" onclick="navigate('book','${cont.book.id}');push('#/book/${cont.book.id}')" tabindex="0" role="button">
+      <div class="continue-left">
+        ${cont.book.cover ? `<img src="${esc(cont.book.cover)}" class="continue-cover" alt=""/>` : ''}
+        <div>
+          <div class="continue-label">▶ Continue listening</div>
+          <div class="continue-title">${esc(cont.book.title)}</div>
+          ${cont.book.author ? `<div class="continue-author">${esc(cont.book.author)}</div>` : ''}
+        </div>
+      </div>
+      <button class="btn btn-primary continue-btn" onclick="event.stopPropagation();navigate('book','${cont.book.id}');push('#/book/${cont.book.id}')">Resume</button>
+    </div>` : '';
 
   const heroCTA = state.user
     ? `<button class="btn btn-primary" onclick="openUpload()">Upload a Book</button>`
@@ -185,68 +264,40 @@ async function renderLibrary() {
         ${shelfTile('The Great Gatsby','F. Scott Fitzgerald','Fiction','/static/covers/gatsby.png')}
         ${shelfTile('Meditations','Marcus Aurelius','Philosophy','/static/covers/meditations.png')}
       </div>
-    </div>`;
+    </div>
+    ${continueBar}`;
 
-  const statsBar = `
-    <div class="stats-bar">
-      <div class="stat-item"><div class="stat-num">70,000+</div><div class="stat-lbl">public domain titles</div></div>
-      <div class="stat-div"></div>
-      <div class="stat-item"><div class="stat-num">400+</div><div class="stat-lbl">community listeners</div></div>
-      <div class="stat-div"></div>
-      <div class="stat-item"><div class="stat-num">Natural</div><div class="stat-lbl">AI voices</div></div>
-      <div class="stat-div"></div>
-      <div class="stat-item"><div class="stat-num">Free</div><div class="stat-lbl">forever</div></div>
-    </div>`;
+  // My Books row (private uploads, shown to logged-in user)
+  const mineRow = (state.user && myBooks.length)
+    ? shelfRow('My Books', myBooks) : '';
 
-  const howItWorks = `
-    <section class="how-section">
-      <h2 class="section-title">How it works</h2>
-      <div class="how-grid">
-        <div class="how-card">
-          <div class="how-num">01</div>
-          <div class="how-body">
-            <div class="how-title">Browse or upload</div>
-            <div class="how-sub">Find a classic in the community library, or upload a PDF or ePub you own. Your uploads are always private.</div>
-          </div>
-        </div>
-        <div class="how-card">
-          <div class="how-num">02</div>
-          <div class="how-body">
-            <div class="how-title">Pick a voice, generate</div>
-            <div class="how-sub">Choose from multiple natural AI voices. Preview before you commit. Your audiobook generates chapter by chapter — start listening in minutes.</div>
-          </div>
-        </div>
-        <div class="how-card">
-          <div class="how-num">03</div>
-          <div class="how-body">
-            <div class="how-title">Listen anywhere</div>
-            <div class="how-sub">Speed controls, volume boost, bookmarks that save your place. Works on any device, no app required.</div>
-          </div>
-        </div>
-      </div>
-    </section>`;
+  // Categorised public shelves
+  const shelves = categorizeShelves(publicBooks);
+  const shelfHTML = shelves.map(s => shelfRow(s.label, s.books)).join('');
 
-  const testimonials = `
-    <section class="testimonials-section">
-      <h2 class="section-title">What listeners say</h2>
-      <div class="testimonials-grid">
-        <div class="testimonial-card">
-          <div class="testi-stars">★★★★★</div>
-          <p>"I have dyslexia and always struggled with reading. Freedible has completely changed how I experience books. I listen on my commute every single day."</p>
-          <div class="testi-author">Sarah M. · Bradford</div>
-        </div>
-        <div class="testimonial-card">
-          <div class="testi-stars">★★★★★</div>
-          <p>"Converted my entire philosophy reading list to audiobooks in one afternoon. The voice quality is genuinely impressive — better than I expected from a free tool."</p>
-          <div class="testi-author">James T. · Edinburgh</div>
-        </div>
-        <div class="testimonial-card">
-          <div class="testi-stars">★★★★★</div>
-          <p>"Finally got through Middlemarch on my commute. I'd been putting it off for three years. Would never have managed it any other way."</p>
-          <div class="testi-author">Priya K. · London</div>
-        </div>
-      </div>
-    </section>`;
+  const emptyLibrary = !publicBooks.length ? `
+    <div class="empty-state" style="margin:48px 0">
+      No public books yet. ${state.user ? 'Be the first to share one.' : '<button class="btn btn-primary" onclick="signIn()" style="margin-top:12px">Sign in to upload</button>'}
+    </div>` : '';
+
+  // Speechify-style masonry testimonials
+  const TESTIMONIALS = [
+    { text: "I used to hate school because I'd spend hours just trying to read assignments. Listening has been totally life changing. This saved my education.", author: "Ana" },
+    { text: "This is the only review I've ever written. I listen to books about finance and history while I work. It brought me to the brink of tears how much easier reading has become for me.", author: "Leahliz1989" },
+    { text: "Might be one of the GOAT apps. You can literally get through an entire book in a day. Easily worth every penny — and it's free.", author: "TJV 34" },
+    { text: "I'm a junior doctor and Freedible saves me a ton of time. I listen while walking to clinic, running, making coffee in the morning.", author: "Theodota" },
+    { text: "Finally got through War and Peace. I'd been putting it off for a decade. Would never have managed it any other way.", author: "James T. · Edinburgh" },
+    { text: "The voice quality genuinely surprised me. Converted my entire philosophy reading list in one afternoon.", author: "Priya K. · London" },
+    { text: "I have dyslexia and Freedible changed how I experience books. I listen on my commute every single day.", author: "Sarah M. · Bradford" },
+    { text: "Miracle reader. Allows me to develop a personalised style of listening while proofing my work.", author: "M. Wright" },
+    { text: "Made my commute feel productive. Three Austen novels in a month.", author: "Claire B." },
+  ];
+  const testiHTML = TESTIMONIALS.map(t => `
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <div class="testi-text">${esc(t.text)}</div>
+      <div class="testi-name">${esc(t.author)}</div>
+    </div>`).join('');
 
   const accessPitch = `
     <section class="access-pitch">
@@ -260,35 +311,16 @@ async function renderLibrary() {
       </div>
     </section>`;
 
-  const mineSection = state.user && myBooks.length ? `
-    <section class="lib-section">
-      <div class="lib-head">
-        <h2 class="lib-h1">Your Books</h2>
-        <span class="lib-meta">${myBooks.length} book${myBooks.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div class="grid" id="grid-mine">${myBooks.map(bookCard).join('')}</div>
-    </section>` : '';
-
-  const communitySection = `
-    <section class="lib-section">
-      <div class="lib-head">
-        <h2 class="lib-h1">Community Library</h2>
-        ${stats.books > 0 ? `<span class="lib-meta">${stats.books} book${stats.books !== 1 ? 's' : ''} · ${stats.hours}+ hrs of audio</span>` : ''}
-      </div>
-      ${publicBooks.length
-        ? `<div class="grid" id="grid-public">${publicBooks.map(bookCard).join('')}</div>`
-        : `<div class="empty-state">No public books yet. ${state.user ? 'Be the first to share one.' : '<button class="btn btn-primary" onclick="signIn()" style="margin-top:12px">Sign in to upload the first</button>'}</div>`}
-    </section>`;
-
   document.getElementById('app').innerHTML = `
     <div class="page">
       ${hero}
-      ${statsBar}
-      ${howItWorks}
-      ${testimonials}
+      ${mineRow}
+      ${shelfHTML || emptyLibrary}
+      <section class="testimonials-section">
+        <h2 class="section-title">What listeners say</h2>
+        <div class="testi-masonry">${testiHTML}</div>
+      </section>
       ${accessPitch}
-      ${mineSection}
-      ${communitySection}
     </div>`;
 
   if (state.books.some(b => b.status === 'generating')) {
@@ -299,17 +331,11 @@ async function renderLibrary() {
       ]);
       if (!fp) return;
       state.books = [...fp, ...(fm || []).filter(b => !fp.some(p => p.id === b.id))];
-      if (state.page === 'library') {
-        const pub = document.getElementById('grid-public');
-        const mine = document.getElementById('grid-mine');
-        if (pub) pub.innerHTML = fp.map(bookCard).join('');
-        if (mine && fm) mine.innerHTML = fm.map(bookCard).join('');
-      }
       if (!state.books.some(b => b.status === 'generating')) {
         clearInterval(state.pollTimer);
         state.pollTimer = null;
       }
-    }, 2500);
+    }, 4000);
   }
 }
 
