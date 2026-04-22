@@ -152,14 +152,14 @@ function statusBadge(s) {
 
 // ── Netflix-style shelf rows ──────────────────────────────────────────────────
 const SHELF_CATEGORIES = [
-  { label: 'Horror & Gothic',          keys: ['Frankenstein','Dracula','Jekyll','Dorian Gray','Hound of the Baskervilles'] },
-  { label: 'Mystery & Detective',      keys: ['Sherlock Holmes','Hound of the','Monte Cristo','Crime and Punishment'] },
-  { label: 'Philosophy & Wisdom',      keys: ['Meditations','Art of War','The Prince','The Republic','Zarathustra','A Modest Proposal','The Odyssey'] },
-  { label: 'Russian Masters',          keys: ['Anna Karenina','War and Peace','Brothers Karamazov','Crime and Punishment'] },
+  { label: 'Horror & Gothic',          keys: ['Frankenstein','Dracula','Jekyll','Dorian Gray'] },
+  { label: 'Mystery & Detective',      keys: ['Sherlock Holmes','Baskervilles','Adventures of Sherlock'] },
+  { label: 'Philosophy & Wisdom',      keys: ['Meditations','Art of War','The Prince','The Republic','Zarathustra','Modest Proposal','The Odyssey','Odyssey'] },
+  { label: 'Russian Masters',          keys: ['Crime and Punishment','Anna Karenina','War and Peace','Brothers Karamazov'] },
   { label: 'Science Fiction',          keys: ['Time Machine','War of the Worlds','Twenty Thousand Leagues','Around the World'] },
   { label: 'American Classics',        keys: ['Great Gatsby','Scarlet Letter','Moby Dick','Tom Sawyer','Huckleberry Finn','Uncle Tom','Call of the Wild','Wizard of Oz','Little Women'] },
-  { label: 'World Literature',         keys: ['Don Quixote','Les Misér','Metamorphosis','Odyssey','Les Mise'] },
-  { label: 'Classic Literature',       keys: [] },  // catch-all
+  { label: 'World Literature',         keys: ['Don Quixote','Les Mis','Metamorphosis','Count of Monte Cristo'] },
+  { label: 'Classic Literature',       keys: [] },
 ];
 
 function categorizeShelves(books) {
