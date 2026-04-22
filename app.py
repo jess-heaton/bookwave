@@ -47,6 +47,39 @@ SESSION_SECRET       = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
 ADMIN_EMAIL          = os.environ.get("ADMIN_EMAIL", "jessheaton001@gmail.com").lower()
 AUTH_ENABLED         = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
+# ── Cloudflare R2 audio storage (optional — falls back to local if not set) ──
+R2_ACCOUNT_ID        = os.environ.get("R2_ACCOUNT_ID", "")
+R2_ACCESS_KEY_ID     = os.environ.get("R2_ACCESS_KEY_ID", "")
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+R2_BUCKET            = os.environ.get("R2_BUCKET", "freedible-audio")
+R2_PUBLIC_URL        = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
+R2_ENABLED           = bool(R2_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_PUBLIC_URL)
+_r2_client = None
+
+def _get_r2():
+    global _r2_client
+    if _r2_client is None:
+        import boto3
+        _r2_client = boto3.client(
+            "s3",
+            endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+            aws_access_key_id=R2_ACCESS_KEY_ID,
+            aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+            region_name="auto",
+        )
+    return _r2_client
+
+def _r2_upload(local_path: str, key: str):
+    ct = "audio/mpeg" if local_path.endswith(".mp3") else "audio/wav"
+    _get_r2().upload_file(
+        local_path, R2_BUCKET, key,
+        ExtraArgs={"ContentType": ct, "CacheControl": "public, max-age=31536000"},
+    )
+
+def _r2_delete_key(key: str):
+    try: _get_r2().delete_object(Bucket=R2_BUCKET, Key=key)
+    except Exception as e: print(f"[R2] delete failed {key}: {e}")
+
 # ── Curated public-domain seed library ────────────────────────────────────────
 # (gutenberg_id, display_title, author, preferred_voice)
 _SEED_CATALOG = [
@@ -476,6 +509,12 @@ async def tts_chapter(chapter_id, text, voice):
 
     if not Path(out).exists() or Path(out).stat().st_size < 100:
         raise RuntimeError("TTS produced no audio")
+
+    if R2_ENABLED:
+        key = f"audio/{chapter_id}.{ext}"
+        await asyncio.to_thread(_r2_upload, out, key)
+        Path(out).unlink(missing_ok=True)
+        return f"{R2_PUBLIC_URL}/{key}"
     return f"/audio/{chapter_id}.{ext}"
 
 async def generate_book(book_id, voice_id):
@@ -1360,7 +1399,7 @@ async def _seed_one(gut_id: int, title: str, author: str, voice: str) -> dict:
 
     bid = str(uuid.uuid4())
     try:
-        parsed = _parse_epub(data, bid)
+        parsed = await asyncio.to_thread(_parse_epub, data, bid)
     except Exception as e:
         return {"status": "error", "title": title, "reason": f"parse: {e}"}
 
@@ -1368,10 +1407,13 @@ async def _seed_one(gut_id: int, title: str, author: str, voice: str) -> dict:
     cover_url = parsed["cover_url"]
 
     # Try Open Library for a nicer cover
-    ol_bytes = await _fetch_ol_cover(title, author)
+    try:
+        ol_bytes = await _fetch_ol_cover(title, author)
+    except Exception:
+        ol_bytes = None
     if ol_bytes:
         cover_path = COVERS / f"{bid}.jpg"
-        cover_path.write_bytes(ol_bytes)
+        await asyncio.to_thread(cover_path.write_bytes, ol_bytes)
         cover_url = f"/covers/{bid}.jpg"
 
     async with aiosqlite.connect(DB) as db:
@@ -1467,11 +1509,17 @@ async def delete_book(request: Request, bid: str):
             raise HTTPException(403, "Not your book")
         async with db.execute("SELECT audio FROM chapters WHERE book_id=?", (bid,)) as c:
             for ch in await c.fetchall():
-                if ch["audio"]:
-                    p = BASE / ch["audio"].lstrip("/")
-                    p.unlink(missing_ok=True)
+                url = ch["audio"] or ""
+                if not url: continue
+                if R2_ENABLED and url.startswith("http"):
+                    key = "/".join(url.split("/")[-2:])  # "audio/{chapter_id}.mp3"
+                    await asyncio.to_thread(_r2_delete_key, key)
+                else:
+                    (AUDIO / Path(url).name).unlink(missing_ok=True)
         if b["cover"]:
-            (BASE / b["cover"].lstrip("/")).unlink(missing_ok=True)
+            cover_url = b["cover"]
+            if not cover_url.startswith("http"):
+                (COVERS / Path(cover_url).name).unlink(missing_ok=True)
         await db.execute("DELETE FROM texts WHERE id IN (SELECT id FROM chapters WHERE book_id=?)", (bid,))
         await db.execute("DELETE FROM chapters WHERE book_id=?", (bid,))
         await db.execute("DELETE FROM reports WHERE book_id=?", (bid,))
