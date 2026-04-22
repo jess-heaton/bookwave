@@ -1466,16 +1466,37 @@ async def admin_catalog(request: Request):
     await require_admin(request)
     return [{"gut_id": e[0], "title": e[1], "author": e[2], "voice": e[3]} for e in _SEED_CATALOG]
 
+@app.post("/api/admin/generate-seeded")
+async def generate_all_seeded(request: Request, background_tasks: BackgroundTasks):
+    """Kick off TTS generation for every seeded public book that hasn't been generated yet."""
+    await require_admin(request)
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id,voice FROM books WHERE user_id='__seed__' AND status='uploaded'") as c:
+            pending = await c.fetchall()
+        for row in pending:
+            await db.execute("UPDATE books SET status='generating', done=0 WHERE id=?", (row["id"],))
+            await db.execute("UPDATE chapters SET status='pending', audio='' WHERE book_id=?", (row["id"],))
+        await db.commit()
+    for row in pending:
+        background_tasks.add_task(generate_book, row["id"], row["voice"])
+    return {"started": len(pending)}
+
 @app.post("/api/books/{bid}/generate")
 async def generate(request: Request, bid: str, background_tasks: BackgroundTasks, voice: str = "af_bella"):
     user = await require_user(request)
     is_admin = (user.get("email") or "").lower() == ADMIN_EMAIL
     async with aiosqlite.connect(DB) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT status,user_id FROM books WHERE id=?", (bid,)) as c:
+        async with db.execute("SELECT status,user_id,visibility FROM books WHERE id=?", (bid,)) as c:
             book = await c.fetchone()
         if not book: raise HTTPException(404)
-        if book["user_id"] != user["id"] and not is_admin: raise HTTPException(403, "Not your book")
+        is_public_seed = book["user_id"] == "__seed__" and book["visibility"] == "public"
+        # Allow: owner, admin, or any signed-in user for a public-seed book not yet generated
+        if book["user_id"] != user["id"] and not is_admin:
+            if not (is_public_seed and book["status"] == "uploaded"):
+                raise HTTPException(403, "Not your book")
         await db.execute("UPDATE books SET status='generating', voice=?, done=0 WHERE id=?", (voice, bid))
         await db.execute("UPDATE chapters SET status='pending', audio='' WHERE book_id=?", (bid,))
         await db.commit()

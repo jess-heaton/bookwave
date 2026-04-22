@@ -517,7 +517,10 @@ async function openAdmin() {
           <div style="padding:0 24px 16px">
             <h3 style="font-size:15px;font-weight:700;margin:0 0 8px">Seed Public Library</h3>
             <p style="font-size:13px;color:#8888aa;margin:0 0 12px">Download books from Project Gutenberg + Open Library covers and add them as public books. Seeding all 47 books runs in the background.</p>
-            <button class="btn btn-primary" onclick="seedAll(this)" style="margin-bottom:16px">⬇ Seed All ${catalog.length} Books</button>
+            <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="seedAll(this)">⬇ Seed All ${catalog.length} Books</button>
+              <button class="btn" style="background:#4ade80;color:#000" onclick="generateAllSeeded(this)">▶ Generate Audio for All Seeded</button>
+            </div>
             <div class="admin-list" style="max-height:260px;overflow-y:auto">${catalogRows}</div>
           </div>
 
@@ -540,6 +543,20 @@ async function seedAll(btn) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = '⬇ Seed All Books';
+    alert(e.message);
+  }
+}
+
+async function generateAllSeeded(btn) {
+  if (!confirm('Start generating audio for all seeded books that haven\'t been processed yet? This uses Modal GPU time.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Starting…';
+  try {
+    const r = await api('POST', '/api/admin/generate-seeded');
+    btn.textContent = `✓ ${r.started} books queued`;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '▶ Generate Audio for All Seeded';
     alert(e.message);
   }
 }
@@ -697,7 +714,17 @@ function renderBook(progData) {
           <h1 class="hero-title">${esc(b.title)}</h1>
           ${b.author ? `<div class="hero-author">${esc(b.author)}</div>` : ''}
           <div class="hero-meta">${b.total} chapters · ${totalWords.toLocaleString()} words · ${totalTime} listening</div>
-          ${isOwner ? genControls : ''}
+          ${(isOwner || isAdmin) ? genControls
+            : (b.visibility === 'public' && b.status === 'uploaded' && state.user)
+              ? `<div class="voice-row" style="margin-top:16px">
+                  <button class="btn btn-primary" onclick="startGenPublic()">▶ Generate for Community</button>
+                  <div style="font-size:12px;color:var(--muted);margin-top:8px">Start narration for this public domain book — everyone benefits.</div>
+                 </div>`
+            : (b.visibility === 'public' && b.status === 'uploaded' && !state.user)
+              ? `<div style="margin-top:16px;font-size:14px;color:var(--muted)">
+                  <a href="/api/auth/google" style="color:var(--accent)">Sign in</a> to generate audio for this book.
+                 </div>`
+            : ''}
           <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
             ${shareAction}
             ${ownerActions}
@@ -734,6 +761,13 @@ async function startGen() {
   const voice = document.getElementById('voice-sel')?.value || 'af_bella';
   await api('POST', `/api/books/${state.book.id}/generate?voice=${encodeURIComponent(voice)}`);
   await loadBook(state.book.id);
+}
+
+async function startGenPublic() {
+  try {
+    await api('POST', `/api/books/${state.book.id}/generate?voice=${encodeURIComponent(state.book.voice || 'af_bella')}`);
+    await loadBook(state.book.id);
+  } catch (e) { alert(e.message); }
 }
 
 let lastProg = {};
