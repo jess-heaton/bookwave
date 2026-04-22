@@ -175,7 +175,11 @@ async def init_db():
         await db.commit()
 
 @app.on_event("startup")
-async def startup(): await init_db()
+async def startup():
+    await init_db()
+    # Clean up any leftover upload files — text is in DB, originals waste volume space
+    for f in UPLOADS.glob("*"):
+        f.unlink(missing_ok=True)
 
 # ── PDF helpers ───────────────────────────────────────────────────────────────
 # Numbered chapter: "Chapter 1", "Part II", "Book Three", "Section 2"
@@ -1250,6 +1254,7 @@ async def upload(request: Request, file: UploadFile = File(...)):
                     (cid, bid, i+1, ch["title"], len(ch["text"].split()), "", "pending"))
                 await db.execute("INSERT INTO texts VALUES (?,?)", (cid, ch["text"]))
             await db.commit()
+        upload_path.unlink(missing_ok=True)  # text is in DB — no need to keep the original file
         return {"id": bid, "title": title, "chapters": len(chapters)}
 
     except HTTPException:
