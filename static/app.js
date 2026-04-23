@@ -1,3 +1,15 @@
+// ── Analytics ─────────────────────────────────────────────────────────────────
+function track(event, params = {}) {
+  // GA4
+  if (typeof gtag !== 'undefined') {
+    try { gtag('event', event, params); } catch {}
+  }
+  // Plausible custom events
+  if (typeof window.plausible !== 'undefined') {
+    try { window.plausible(event, { props: params }); } catch {}
+  }
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
   page: 'library',
@@ -16,7 +28,7 @@ async function loadUser() {
   } catch { state.user = null; }
   renderHeader();
 }
-function signIn()  { location.href = '/api/auth/google'; }
+function signIn()  { track('sign_in'); location.href = '/api/auth/google'; }
 async function signOut() {
   try { await api('POST', '/api/auth/logout'); } catch {}
   state.user = null;
@@ -98,6 +110,11 @@ function navigate(page, id) {
   state.pollTimer = null;
   state.page = page;
   state.bookId = id || null;
+  // SPA page_view for GA4 (replaces automatic tracking which only fires on hard load)
+  const pagePath = page === 'book' ? `/book/${id}` : '/';
+  if (typeof gtag !== 'undefined') {
+    try { gtag('event', 'page_view', { page_path: pagePath, page_title: document.title }); } catch {}
+  }
   if (page === 'library') renderLibrary();
   else if (page === 'book') loadBook(id);
 }
@@ -228,7 +245,7 @@ async function renderLibrary() {
   // Continue listening bar
   const cont = getContinueListening(state.books);
   const continueBar = cont ? `
-    <div class="continue-bar" onclick="navigate('book','${cont.book.id}');push('#/book/${cont.book.id}')" tabindex="0" role="button">
+    <div class="continue-bar" onclick="track('continue_listening',{book_title:'${esc(cont.book.title)}'});navigate('book','${cont.book.id}');push('#/book/${cont.book.id}')" tabindex="0" role="button">
       <div class="continue-left">
         ${cont.book.cover ? `<img src="${esc(cont.book.cover)}" class="continue-cover" alt=""/>` : ''}
         <div>
@@ -431,6 +448,7 @@ async function doUpload() {
   try {
     const fd = new FormData(); fd.append('file', uploadFile);
     const r = await api('POST', '/api/upload', fd);
+    track('upload_book', { file_type: uploadFile.name.endsWith('.epub') ? 'epub' : 'pdf', chapters: r.chapters });
     closeUpload();
     navigate('book', r.id); push('#/book/' + r.id);
   } catch(e) {
@@ -785,13 +803,16 @@ async function doDelete() {
 
 async function startGen() {
   const voice = document.getElementById('voice-sel')?.value || 'af_bella';
+  track('generate_book', { book_title: state.book.title, voice, is_owner: true });
   await api('POST', `/api/books/${state.book.id}/generate?voice=${encodeURIComponent(voice)}`);
   await loadBook(state.book.id);
 }
 
 async function startGenPublic() {
   try {
-    await api('POST', `/api/books/${state.book.id}/generate?voice=${encodeURIComponent(state.book.voice || 'af_bella')}`);
+    const voice = state.book.voice || 'af_bella';
+    track('generate_book', { book_title: state.book.title, voice, is_public: true });
+    await api('POST', `/api/books/${state.book.id}/generate?voice=${encodeURIComponent(voice)}`);
     await loadBook(state.book.id);
   } catch (e) { alert(e.message); }
 }
@@ -852,6 +873,9 @@ function playChapter(chapterId) {
   const ch = state.book.chapters.find(c => c.id === chapterId);
   if (!ch || !ch.audio) return;
   const ready = state.book.chapters.filter(c => c.status === 'complete' && c.audio);
+  const isFirstPlay = !state.player || state.player.book.id !== state.book.id;
+  if (isFirstPlay) track('play_book', { book_title: state.book.title, author: state.book.author || '' });
+  track('play_chapter', { book_title: state.book.title, chapter_title: ch.title, chapter_num: ch.num });
   state.player = { book: state.book, chapters: ready, chapterId };
   loadAndPlay(ch);
   renderPlayerBar();
@@ -1029,6 +1053,7 @@ let sampleAudio = null;
 function previewVoice() {
   const voice = document.getElementById('voice-sel')?.value;
   if (!voice) return;
+  track('voice_preview', { voice });
   const btn = document.getElementById('voice-preview-btn');
   if (sampleAudio && !sampleAudio.paused) { stopVoiceSample(); return; }
   if (btn) btn.textContent = '⏳ Loading…';
@@ -1047,6 +1072,7 @@ function stopVoiceSample() {
 function resumeBookmark(bookId) {
   const bm = loadBookmark(bookId);
   if (!bm || !state.book) return;
+  track('resume_bookmark', { book_title: state.book.title, time_seconds: bm.time });
   const ch = state.book.chapters.find(c => c.id === bm.chapterId && c.audio);
   if (!ch) return;
   playChapter(ch.id);
@@ -1130,6 +1156,11 @@ function esc(s) {
 (async () => {
   await loadUser();
   const m = location.hash.match(/^#\/book\/(.+)$/);
+  const initPage = m ? `/book/${m[1]}` : '/';
+  // Fire GA4 page_view on initial load (gtag config has send_page_view:false)
+  if (typeof gtag !== 'undefined') {
+    try { gtag('event', 'page_view', { page_path: initPage, page_title: document.title }); } catch {}
+  }
   if (m) navigate('book', m[1]);
   else renderLibrary();
 })();
