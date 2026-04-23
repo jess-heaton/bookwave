@@ -13,18 +13,24 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23f97316'/%3E%3Cpath d='M28 28h44v44H28z M28 28l22 11 22-11 M50 39v33' stroke='white' stroke-width='5' fill='none' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"/>
-<link rel="stylesheet" href="/static/style.css?v=18"/>
+<link rel="stylesheet" href="/static/style.css?v=19"/>
 <script defer data-domain="freedible.co.uk" src="https://plausible.io/js/script.js"></script>
-<!-- Google Analytics 4 — replace G-XXXXXXXXXX with your Measurement ID -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-XXXXXXXXXX', {
-    send_page_view: false,
-    cookie_flags: 'SameSite=None;Secure',
-  });
+  // GA4 loads only after cookie consent
+  function _initGA4(){
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=G-ZPC1WBR1NZ';
+    document.head.appendChild(s);
+    gtag('config', 'G-ZPC1WBR1NZ', {
+      send_page_view: false,
+      cookie_flags: 'SameSite=None;Secure',
+    });
+  }
+  if(localStorage.getItem('cookie_consent') === 'yes') _initGA4();
 </script>
 </head>
 <body>
@@ -66,6 +72,13 @@
   </div>
 </footer>
 <div id="player" class="player hidden"></div>
-<script src="/static/app.js?v=18"></script>
+<div id="cookie-banner" class="cookie-banner" style="display:none">
+  <span>We use cookies to understand how people use Freedible. <a href="/privacy">Privacy Policy</a></span>
+  <div class="cookie-actions">
+    <button onclick="cookieConsent('no')" class="cookie-btn-decline">Decline</button>
+    <button onclick="cookieConsent('yes')" class="cookie-btn-accept">Accept</button>
+  </div>
+</div>
+<script src="/static/app.js?v=19"></script>
 </body>
 </html>

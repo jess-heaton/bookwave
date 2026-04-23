@@ -1,3 +1,18 @@
+// ── Cookie consent ────────────────────────────────────────────────────────────
+function cookieConsent(choice) {
+  localStorage.setItem('cookie_consent', choice);
+  document.getElementById('cookie-banner').style.display = 'none';
+  if (choice === 'yes' && typeof _initGA4 === 'function') _initGA4();
+}
+(function initCookieBanner() {
+  if (!localStorage.getItem('cookie_consent')) {
+    window.addEventListener('DOMContentLoaded', function () {
+      var b = document.getElementById('cookie-banner');
+      if (b) b.style.display = 'flex';
+    });
+  }
+})();
+
 // ── Analytics ─────────────────────────────────────────────────────────────────
 function track(event, params = {}) {
   // GA4
