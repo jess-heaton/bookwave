@@ -187,13 +187,10 @@ function statusBadge(s) {
 
 // ── Netflix-style shelf rows ──────────────────────────────────────────────────
 const SHELF_CATEGORIES = [
-  { label: 'American Classics',   keys: ['Great Gatsby','Scarlet Letter','Moby Dick','Tom Sawyer','Huckleberry Finn','Uncle Tom','Call of the Wild','Wizard of Oz','Little Women'] },
-  { label: 'Horror & Gothic',     keys: ['Frankenstein','Dracula','Jekyll','Dorian Gray'] },
-  { label: 'Mystery & Detective', keys: ['Sherlock Holmes','Baskervilles','Adventures of Sherlock'] },
-  { label: 'Philosophy & Wisdom', keys: ['Meditations','Art of War','The Prince','The Republic','Zarathustra','Modest Proposal','The Odyssey','Odyssey'] },
-  { label: 'Russian Masters',     keys: ['Crime and Punishment','Anna Karenina','War and Peace','Brothers Karamazov'] },
-  { label: 'Science Fiction',     keys: ['Time Machine','War of the Worlds','Twenty Thousand Leagues','Around the World'] },
-  { label: 'World Literature',    keys: ['Don Quixote','Les Mis','Metamorphosis','Count of Monte Cristo'] },
+  { label: 'American Classics', keys: ['Great Gatsby','Scarlet Letter','Moby Dick','Tom Sawyer','Huckleberry Finn','Uncle Tom','Call of the Wild','Wizard of Oz','Little Women'] },
+  { label: 'Dark Classics',     keys: ['Frankenstein','Dracula','Jekyll','Dorian Gray','Sherlock Holmes','Baskervilles','Adventures of Sherlock'] },
+  { label: 'World Masters',     keys: ['Crime and Punishment','Anna Karenina','War and Peace','Brothers Karamazov','Don Quixote','Les Mis','Metamorphosis','Count of Monte Cristo'] },
+  { label: 'Visionaries',       keys: ['Time Machine','War of the Worlds','Twenty Thousand Leagues','Around the World','Meditations','Art of War','The Prince','The Republic','Zarathustra','Modest Proposal','The Odyssey','Odyssey'] },
 ];
 
 function categorizeShelves(books) {
@@ -346,25 +343,30 @@ async function renderLibrary() {
     </section>`;
 
   const BLOG_CARDS = [
-    { slug: 'best-free-public-domain-audiobooks',   tag: 'Public Domain', title: 'The 12 Best Free Public Domain Audiobooks', desc: 'From Jane Austen to Marcus Aurelius — the greatest classics, narrated and ready to play.' },
-    { slug: 'epub-pdf-to-audiobook',                tag: 'How-To',        title: 'How to Convert an ePub or PDF to Audiobook Free', desc: 'Step-by-step guide to turning any ebook into a natural-sounding audiobook using AI narration.' },
-    { slug: 'audiobooks-dyslexia-visual-impairment',tag: 'Accessibility',  title: 'Audiobooks for Dyslexia & Visual Impairment', desc: 'How listening helps with dyslexia, ADHD, and reading fatigue. Includes UK legal protections.' },
-    { slug: 'ai-audiobook-narration',               tag: 'AI Narration',  title: 'AI Audiobook Narration in 2025: Is It Good Enough?', desc: 'An honest look at how AI voices compare to human narrators — where they work and where they fall short.' },
+    { slug: 'best-free-public-domain-audiobooks',    tag: 'Public Domain', title: 'The 12 Best Free Public Domain Audiobooks', desc: 'From Jane Austen to Marcus Aurelius — the greatest classics, narrated and ready to play.' },
+    { slug: 'convert-epub-pdf-to-audiobook-free',    tag: 'How-To',        title: 'How to Convert an ePub or PDF to Audiobook Free', desc: 'Step-by-step guide to turning any ebook into a natural-sounding audiobook using AI narration.' },
+    { slug: 'audiobooks-dyslexia-visual-impairment', tag: 'Accessibility',  title: 'Audiobooks for Dyslexia & Visual Impairment', desc: 'How listening helps with dyslexia, ADHD, and reading fatigue. Includes UK legal protections.' },
+    { slug: 'ai-audiobook-narration-2025',            tag: 'AI Narration',  title: 'AI Audiobook Narration in 2025: Is It Good Enough?', desc: 'An honest look at how AI voices compare to human narrators — where they work and where they fall short.' },
   ];
+  // Duplicate cards so the carousel can loop seamlessly
+  const carouselCards = [...BLOG_CARDS, ...BLOG_CARDS];
   const blogPanel = `
     <section class="blog-panel">
       <div class="blog-panel-head">
         <h2 class="blog-panel-title">From the blog</h2>
         <a href="/blog" class="blog-panel-all">Read all →</a>
       </div>
-      <div class="blog-panel-grid">
-        ${BLOG_CARDS.map(c => `
-          <a href="/blog/${c.slug}" class="blog-panel-card">
-            <div class="blog-panel-tag">${esc(c.tag)}</div>
-            <div class="blog-panel-card-title">${esc(c.title)}</div>
-            <div class="blog-panel-card-desc">${esc(c.desc)}</div>
-            <div class="blog-panel-read">Read article →</div>
-          </a>`).join('')}
+      <div class="blog-carousel-viewport" id="blog-carousel-vp"
+           onmouseenter="blogCarouselPause()" onmouseleave="blogCarouselResume()">
+        <div class="blog-carousel-track" id="blog-carousel-track">
+          ${carouselCards.map(c => `
+            <a href="/blog/${c.slug}" class="blog-panel-card">
+              <div class="blog-panel-tag">${esc(c.tag)}</div>
+              <div class="blog-panel-card-title">${esc(c.title)}</div>
+              <div class="blog-panel-card-desc">${esc(c.desc)}</div>
+              <div class="blog-panel-read">Read article →</div>
+            </a>`).join('')}
+        </div>
       </div>
     </section>`;
 
@@ -377,6 +379,8 @@ async function renderLibrary() {
       ${restShelfHTML}
       ${blogPanel}
     </div>`;
+
+  initBlogCarousel();
 
   if (state.books.some(b => b.status === 'generating')) {
     state.pollTimer = setInterval(async () => {
@@ -484,6 +488,43 @@ function dzDrop(e) {
   if (f) fileChosen(f);
 }
 // Library-page inline upload zone
+// ── Blog carousel ─────────────────────────────────────────────────────────────
+let _blogCarouselTimer = null;
+let _blogCarouselPaused = false;
+let _blogCarouselIdx = 0;
+
+function initBlogCarousel() {
+  const track = document.getElementById('blog-carousel-track');
+  if (!track) return;
+  clearInterval(_blogCarouselTimer);
+  _blogCarouselIdx = 0;
+  _blogCarouselPaused = false;
+  _blogCarouselTimer = setInterval(_blogCarouselStep, 3800);
+}
+function _blogCarouselStep() {
+  if (_blogCarouselPaused) return;
+  const track = document.getElementById('blog-carousel-track');
+  if (!track) { clearInterval(_blogCarouselTimer); return; }
+  const TOTAL = 4; // original card count (track has 2× duplicates)
+  const cardW = track.firstElementChild?.offsetWidth || 320;
+  const gap = 20;
+  _blogCarouselIdx++;
+  if (_blogCarouselIdx >= TOTAL) {
+    // Jump back silently to index 0 (same card in duplicate set), then animate to 1
+    track.style.transition = 'none';
+    track.style.transform = 'translateX(0)';
+    _blogCarouselIdx = 0;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      track.style.transition = 'transform .75s cubic-bezier(.4,0,.2,1)';
+    }));
+  } else {
+    track.style.transition = 'transform .75s cubic-bezier(.4,0,.2,1)';
+    track.style.transform = `translateX(-${_blogCarouselIdx * (cardW + gap)}px)`;
+  }
+}
+function blogCarouselPause()  { _blogCarouselPaused = true; }
+function blogCarouselResume() { _blogCarouselPaused = false; }
+
 function libDzOver(e) { e.preventDefault(); document.getElementById('lib-upload-zone')?.classList.add('dragover'); }
 function libDzLeave(e) { document.getElementById('lib-upload-zone')?.classList.remove('dragover'); }
 function libDzDrop(e) {

@@ -686,42 +686,72 @@ from fastapi.responses import HTMLResponse
 _SITE_CSS = """
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="/static/style.css?v=14"/>
+<link rel="stylesheet" href="/static/style.css?v=21"/>
 <script defer data-domain="freedible.co.uk" src="https://plausible.io/js/script.js"></script>
 <style>
-.prose{max-width:720px;margin:0 auto;padding:48px 24px 100px}
-.prose h1{font-size:38px;font-weight:800;letter-spacing:-.8px;margin-bottom:14px;line-height:1.12}
-.prose h2{font-size:22px;font-weight:700;margin:40px 0 12px;letter-spacing:-.3px}
-.prose h3{font-size:17px;font-weight:700;margin:26px 0 8px}
-.prose p{color:#c8c8e0;line-height:1.78;margin-bottom:16px;font-size:16px}
-.prose ul,.prose ol{color:#c8c8e0;padding-left:24px;margin-bottom:16px;line-height:1.78}
-.prose li{margin-bottom:6px}
-.prose a{color:#f17b2a;text-decoration:none}
-.prose a:hover{text-decoration:underline}
-.prose .lead{font-size:19px;color:#d8d8f0;margin-bottom:32px;line-height:1.65;font-weight:400}
-.prose .callout{background:#17172b;border:1px solid #2a2a45;border-left:4px solid #f17b2a;border-radius:0 10px 10px 0;padding:18px 22px;margin:28px 0}
-.prose .callout p{margin:0;color:#d8d8f0;font-size:15px}
-.prose hr{border:none;border-top:1px solid #2a2a45;margin:40px 0}
-.prose .tag{display:inline-block;background:#1d1d30;color:#f17b2a;border:1px solid rgba(241,123,42,.3);border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;margin-bottom:20px;letter-spacing:.6px;text-transform:uppercase}
-.bc{font-size:13px;color:#8888aa;margin-bottom:36px;display:flex;align-items:center;gap:6px}
-.bc a{color:#8888aa;text-decoration:none}.bc a:hover{color:#f0f0fa}
-.ph{background:#0e0e18;border-bottom:1px solid #2a2a45;padding:0 24px;height:62px;display:flex;align-items:center}
-.ph-logo{font-weight:800;font-size:20px;color:#f0f0fa;text-decoration:none;letter-spacing:-.5px}
-.ph-logo em{color:#f17b2a;font-style:normal}
-.pf{text-align:center;padding:36px 24px;border-top:1px solid #2a2a45;color:#8888aa;font-size:13px;margin-top:0}
-.pf a{color:#8888aa;text-decoration:none;margin:0 10px}.pf a:hover{color:#f0f0fa}
-.pf-links{display:flex;justify-content:center;flex-wrap:wrap;gap:4px;margin-bottom:12px}
-.blog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;margin-top:32px}
-.blog-card{background:#17172b;border:1px solid #2a2a45;border-radius:14px;padding:24px;text-decoration:none;display:block;transition:border-color .15s,transform .15s}
-.blog-card:hover{border-color:#f17b2a44;transform:translateY(-2px)}
-.blog-card-tag{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#f17b2a;margin-bottom:8px}
-.blog-card-title{font-size:17px;font-weight:700;color:#f0f0fa;margin-bottom:8px;line-height:1.35}
-.blog-card-desc{font-size:14px;color:#8888aa;line-height:1.6}
-.prose-date{font-size:12px;color:#8888aa;margin-bottom:24px;display:block}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0e0e18;color:#f0f0fa;font-family:'Inter',system-ui,sans-serif;font-size:15px;-webkit-font-smoothing:antialiased}
+/* Header */
+.ph{position:sticky;top:0;z-index:100;background:rgba(14,14,24,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid #2a2a45;padding:0 24px;height:62px;display:flex;align-items:center;justify-content:space-between}
+.ph-logo{font-weight:800;font-size:21px;color:#f0f0fa;text-decoration:none;letter-spacing:-.6px}
+.ph-nav{display:flex;align-items:center;gap:6px}
+.ph-nav a{font-size:14px;font-weight:500;color:#8888aa;text-decoration:none;padding:6px 12px;border-radius:8px;transition:color .15s}
+.ph-nav a:hover{color:#f0f0fa}
+.ph-nav .ph-cta{background:#f0f0fa;color:#0e0e18;padding:7px 18px;border-radius:8px;font-weight:700;font-size:13px}
+.ph-nav .ph-cta:hover{opacity:.88;color:#0e0e18}
+/* Breadcrumb */
+.bc{font-size:13px;color:#8888aa;margin-bottom:36px;display:flex;align-items:center;gap:8px}
+.bc a{color:#8888aa;text-decoration:none;transition:color .15s}.bc a:hover{color:#f0f0fa}
+.bc span{opacity:.4}
+/* Prose */
+.prose{max-width:740px;margin:0 auto;padding:52px 24px 100px}
+.prose h1{font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-1px;margin-bottom:16px;line-height:1.1}
+.prose h2{font-size:22px;font-weight:700;margin:44px 0 14px;letter-spacing:-.4px;color:#f0f0fa}
+.prose h3{font-size:17px;font-weight:700;margin:28px 0 10px;color:#e8e8f8}
+.prose p{color:#b8b8d0;line-height:1.82;margin-bottom:18px;font-size:16px}
+.prose ul,.prose ol{color:#b8b8d0;padding-left:28px;margin-bottom:18px;line-height:1.82}
+.prose li{margin-bottom:8px}
+.prose a{color:#f17b2a;text-decoration:none;border-bottom:1px solid rgba(241,123,42,.3);transition:border-color .15s}
+.prose a:hover{border-color:#f17b2a}
+.prose .lead{font-size:19px;color:#d0d0ea;margin-bottom:36px;line-height:1.7;font-weight:400}
+.prose .callout{background:rgba(241,123,42,.06);border:1px solid rgba(241,123,42,.2);border-left:4px solid #f17b2a;border-radius:0 12px 12px 0;padding:20px 24px;margin:32px 0}
+.prose .callout p{margin:0;color:#d0d0ea;font-size:15px}
+.prose hr{border:none;border-top:1px solid #2a2a45;margin:44px 0}
+.prose .tag{display:inline-flex;align-items:center;background:rgba(241,123,42,.1);color:#f17b2a;border:1px solid rgba(241,123,42,.25);border-radius:99px;padding:4px 12px;font-size:11px;font-weight:700;margin-bottom:22px;letter-spacing:.8px;text-transform:uppercase}
+.prose-date{font-size:12px;color:#8888aa;margin-bottom:28px;display:block;letter-spacing:.3px}
+/* Blog index */
+.blog-hero{padding:52px 0 12px}
+.blog-hero h1{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-1px;margin-bottom:12px}
+.blog-hero p{color:#8888aa;font-size:16px;line-height:1.65}
+.blog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;margin-top:36px}
+.blog-card{
+  background:rgba(23,23,43,.6);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid rgba(255,255,255,.06);
+  box-shadow:0 6px 28px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.04);
+  border-radius:18px;padding:26px 24px;text-decoration:none;
+  display:flex;flex-direction:column;gap:10px;
+  transition:transform .22s,border-color .22s,box-shadow .22s;
+}
+.blog-card:hover{transform:translateY(-4px);border-color:rgba(241,123,42,.3);box-shadow:0 16px 44px rgba(0,0,0,.45)}
+.blog-card-tag{display:inline-flex;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#f17b2a;background:rgba(241,123,42,.12);border:1px solid rgba(241,123,42,.2);border-radius:99px;padding:3px 10px;width:fit-content}
+.blog-card-title{font-size:17px;font-weight:800;color:#f0f0fa;line-height:1.35;letter-spacing:-.3px}
+.blog-card-desc{font-size:14px;color:#8888aa;line-height:1.65;flex:1}
+.blog-card-read{font-size:12px;color:#f17b2a;font-weight:600;margin-top:4px;letter-spacing:.3px}
+/* Footer */
+.pf{text-align:center;padding:40px 24px;border-top:1px solid #2a2a45;color:#8888aa;font-size:13px;margin-top:0}
+.pf-links{display:flex;justify-content:center;flex-wrap:wrap;gap:2px;margin-bottom:14px}
+.pf-links a{color:#8888aa;text-decoration:none;padding:4px 10px;border-radius:6px;transition:color .15s}.pf-links a:hover{color:#f0f0fa}
 </style>"""
 
 def _ph():
-    return '<div class="ph"><a class="ph-logo" href="/">Free<em>dible</em></a></div>'
+    return '''<div class="ph">
+  <a class="ph-logo" href="/">Freedible</a>
+  <nav class="ph-nav">
+    <a href="/blog">Blog</a>
+    <a href="/" class="ph-cta">Browse classics</a>
+  </nav>
+</div>'''
 
 def _pf():
     return '''<footer class="pf"><div class="pf-links">
@@ -1145,12 +1175,15 @@ async def blog_index():
       <div class="blog-card-tag">{p['tag']}</div>
       <div class="blog-card-title">{p['title']}</div>
       <div class="blog-card-desc">{p['desc']}</div>
+      <div class="blog-card-read">Read article →</div>
     </a>""" for slug, p in _BLOG_POSTS.items())
     return _page("Blog — Freedible",
                  "Articles on public domain audiobooks, AI narration, accessibility, and listening well.",
                  canonical="/blog", body=f"""
-<h1>Freedible Blog</h1>
-<p class="lead">Guides, recommendations, and thinking on audiobooks, AI narration, and accessibility.</p>
+<div class="blog-hero">
+  <h1>From the blog</h1>
+  <p>Guides, recommendations, and thinking on audiobooks, AI narration, and accessibility.</p>
+</div>
 <div class="blog-grid">{cards}</div>""")
 
 @app.get("/blog/{slug}")
