@@ -1391,6 +1391,46 @@ async def list_reports(request: Request):
             ORDER BY r.created DESC""") as c:
             return [dict(r) for r in await c.fetchall()]
 
+@app.get("/api/admin/dashboard")
+async def admin_dashboard(request: Request):
+    await require_admin(request)
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        now = time.time()
+        week_ago = now - 7 * 86400
+
+        async with db.execute("SELECT COUNT(*) as n FROM users") as c:
+            total_users = (await c.fetchone())["n"]
+        async with db.execute("SELECT COUNT(*) as n FROM users WHERE created > ?", (week_ago,)) as c:
+            new_users_week = (await c.fetchone())["n"]
+        async with db.execute("SELECT COUNT(*) as n FROM subscribers") as c:
+            total_subs = (await c.fetchone())["n"]
+        async with db.execute("SELECT COUNT(*) as n FROM books WHERE user_id != '__seed__'") as c:
+            total_uploads = (await c.fetchone())["n"]
+        async with db.execute("SELECT COUNT(*) as n FROM books WHERE status='complete' AND visibility='public'") as c:
+            total_public = (await c.fetchone())["n"]
+        async with db.execute(
+            "SELECT id, name, email, created FROM users ORDER BY created DESC LIMIT 20") as c:
+            recent_users = [dict(r) for r in await c.fetchall()]
+        async with db.execute("""
+            SELECT b.id, b.title, b.author, b.status, b.visibility, b.created,
+                   u.email as uploader_email, u.name as uploader_name
+            FROM books b
+            LEFT JOIN users u ON u.id = b.user_id
+            WHERE b.user_id != '__seed__'
+            ORDER BY b.created DESC LIMIT 50""") as c:
+            user_uploads = [dict(r) for r in await c.fetchall()]
+
+    return {
+        "total_users": total_users,
+        "new_users_week": new_users_week,
+        "total_subs": total_subs,
+        "total_uploads": total_uploads,
+        "total_public": total_public,
+        "recent_users": recent_users,
+        "user_uploads": user_uploads,
+    }
+
 @app.post("/api/admin/takedown/{bid}")
 async def takedown(request: Request, bid: str):
     await require_admin(request)

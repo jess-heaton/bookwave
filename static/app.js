@@ -630,56 +630,130 @@ async function reportBook() {
   }
 }
 
+function _adminFmt(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
 async function openAdmin() {
   try {
-    const [reports, catalog] = await Promise.all([
+    const [reports, catalog, dash] = await Promise.all([
       api('GET', '/api/admin/reports'),
       api('GET', '/api/admin/catalog'),
+      api('GET', '/api/admin/dashboard'),
     ]);
+
+    // ── Dashboard tab ──────────────────────────────────────────────────────────
+    const statCards = [
+      { label: 'Registered users',   value: dash.total_users },
+      { label: 'New this week',       value: dash.new_users_week },
+      { label: 'Email subscribers',  value: dash.total_subs },
+      { label: 'User uploads',       value: dash.total_uploads },
+      { label: 'Public books ready', value: dash.total_public },
+    ].map(s => `
+      <div class="adash-stat">
+        <div class="adash-stat-val">${s.value}</div>
+        <div class="adash-stat-lbl">${s.label}</div>
+      </div>`).join('');
+
+    const userRows = dash.recent_users.length
+      ? dash.recent_users.map(u => `
+          <div class="admin-row" style="padding:8px 0;gap:12px">
+            <div style="flex:1;min-width:0">
+              <div class="admin-row-title" style="font-size:13px">${esc(u.name || '(no name)')}</div>
+              <div class="admin-row-meta">${esc(u.email)}</div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);flex-shrink:0">${_adminFmt(u.created)}</div>
+          </div>`).join('')
+      : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No users yet.</div>';
+
+    const uploadRows = dash.user_uploads.length
+      ? dash.user_uploads.map(b => `
+          <div class="admin-row" style="padding:8px 0;gap:12px">
+            <div style="flex:1;min-width:0">
+              <div class="admin-row-title" style="font-size:13px">${esc(b.title)}</div>
+              <div class="admin-row-meta">${esc(b.uploader_email || 'unknown')} · ${b.visibility} · ${b.status}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              <div style="font-size:12px;color:var(--muted)">${_adminFmt(b.created)}</div>
+              ${b.visibility === 'public' ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="takedown('${b.id}')">Hide</button>` : ''}
+            </div>
+          </div>`).join('')
+      : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No user uploads yet.</div>';
+
+    // ── Reports tab ────────────────────────────────────────────────────────────
     const rows = reports.length
       ? reports.map(r => `
           <div class="admin-row">
             <div>
               <div class="admin-row-title">${esc(r.book_title || '(deleted)')}</div>
-              <div class="admin-row-meta">${esc(r.reporter_email || 'anonymous')} · ${new Date(r.created*1000).toLocaleString()} · <span class="admin-status-${r.status}">${r.status}</span></div>
+              <div class="admin-row-meta">${esc(r.reporter_email || 'anonymous')} · ${_adminFmt(r.created)} · <span class="admin-status-${r.status}">${r.status}</span></div>
               <div class="admin-row-reason">${esc(r.reason || '')}</div>
             </div>
             <button class="btn btn-danger" onclick="takedown('${r.book_id}')">Make Private</button>
           </div>`).join('')
       : '<div class="empty-state">No reports.</div>';
 
+    // ── Seed tab ───────────────────────────────────────────────────────────────
     const catalogRows = catalog.map(e => `
-      <div class="admin-row" style="padding:10px 0">
-        <div style="flex:1">
-          <div class="admin-row-title" style="font-size:14px">${esc(e.title)}</div>
-          <div class="admin-row-meta">${esc(e.author)} · Gutenberg #${e.gut_id} · voice: ${esc(e.voice)}</div>
+      <div class="admin-row" style="padding:8px 0">
+        <div style="flex:1;min-width:0">
+          <div class="admin-row-title" style="font-size:13px">${esc(e.title)}</div>
+          <div class="admin-row-meta">${esc(e.author)} · #${e.gut_id}</div>
         </div>
-        <button class="btn btn-ghost" style="font-size:12px;padding:6px 12px"
+        <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px"
           onclick="seedOne(${e.gut_id}, this)">Seed</button>
       </div>`).join('');
 
     document.getElementById('app').insertAdjacentHTML('beforeend', `
       <div class="overlay" id="admin-overlay" onclick="if(event.target.id==='admin-overlay')this.remove()">
-        <div class="modal" style="max-width:760px;max-height:90vh;overflow-y:auto">
-          <div class="modal-header"><h2>Admin</h2><button class="ibtn" onclick="document.getElementById('admin-overlay').remove()">${closeIcon()}</button></div>
+        <div class="modal" style="max-width:800px;max-height:92vh;overflow-y:auto;padding:0">
+          <div style="padding:24px 28px 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:0">
+            <h2 style="font-size:18px;font-weight:800">Admin</h2>
+            <button class="ibtn" onclick="document.getElementById('admin-overlay').remove()">${closeIcon()}</button>
+          </div>
+          <div class="adash-tabs" id="adash-tabs">
+            <button class="adash-tab active" onclick="adashTab(0)">Dashboard</button>
+            <button class="adash-tab" onclick="adashTab(1)">Uploads</button>
+            <button class="adash-tab" onclick="adashTab(2)">Reports</button>
+            <button class="adash-tab" onclick="adashTab(3)">Seed</button>
+          </div>
 
-          <div style="padding:0 24px 16px">
-            <h3 style="font-size:15px;font-weight:700;margin:0 0 8px">Seed Public Library</h3>
-            <p style="font-size:13px;color:#8888aa;margin:0 0 12px">Download books from Project Gutenberg + Open Library covers and add them as public books. Seeding all 47 books runs in the background.</p>
+          <div class="adash-panel" id="adash-0" style="padding:24px 28px">
+            <div class="adash-stats">${statCards}</div>
+            <div style="margin-top:24px">
+              <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Recent sign-ups</div>
+              <div class="admin-list">${userRows}</div>
+            </div>
+          </div>
+
+          <div class="adash-panel" id="adash-1" style="padding:24px 28px;display:none">
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">User uploads (${dash.total_uploads} total)</div>
+            <div class="admin-list">${uploadRows}</div>
+          </div>
+
+          <div class="adash-panel" id="adash-2" style="padding:24px 28px;display:none">
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px">Content reports</div>
+            <div class="admin-list">${rows}</div>
+          </div>
+
+          <div class="adash-panel" id="adash-3" style="padding:24px 28px;display:none">
+            <p style="font-size:13px;color:var(--muted);margin:0 0 12px">Download from Project Gutenberg + Open Library covers. Seeding runs in background.</p>
             <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
               <button class="btn btn-primary" onclick="seedAll(this)">⬇ Seed All ${catalog.length} Books</button>
               <button class="btn" style="background:#4ade80;color:#000" onclick="generateAllSeeded(this)">▶ Generate Audio for All Seeded</button>
             </div>
-            <div class="admin-list" style="max-height:260px;overflow-y:auto">${catalogRows}</div>
-          </div>
-
-          <div style="padding:0 24px 16px">
-            <h3 style="font-size:15px;font-weight:700;margin:0 0 8px">Reports</h3>
-            <div class="admin-list">${rows}</div>
+            <div class="admin-list" style="max-height:340px;overflow-y:auto">${catalogRows}</div>
           </div>
         </div>
       </div>`);
   } catch (e) { alert(e.message); }
+}
+
+function adashTab(idx) {
+  document.querySelectorAll('.adash-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('.adash-panel').forEach((p, i) => p.style.display = i === idx ? 'block' : 'none');
 }
 
 async function seedAll(btn) {
