@@ -240,13 +240,62 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
 .notify-btn:hover{opacity:.85}
 .notify-thanks{font-size:14px;color:var(--success);font-weight:600}
 
-/* ── Upload pitch section ── */
-.upload-pitch{display:flex;gap:28px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px;margin:64px 0}
-.upload-pitch-icon{flex-shrink:0;color:var(--accent);margin-top:4px}
-.upload-pitch-title{font-size:22px;font-weight:800;margin-bottom:10px;letter-spacing:-.4px}
-.upload-pitch-sub{font-size:15px;color:var(--muted);line-height:1.7;max-width:500px;margin-bottom:18px}
-.upload-pitch-tags{display:flex;flex-wrap:wrap;gap:8px}
-.upload-tag{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:13px;color:var(--muted)}
+/* ── Library inline upload zone ── */
+.lib-upload-zone{
+  position:relative;overflow:hidden;
+  border:2px dashed var(--border);border-radius:24px;
+  padding:72px 32px;margin:12px 0 56px;
+  text-align:center;cursor:pointer;
+  background:radial-gradient(ellipse at 50% 0%,rgba(241,123,42,.04) 0%,transparent 70%),var(--bg);
+  transition:border-color .25s,background .25s;
+}
+.lib-upload-zone:hover,.lib-upload-zone.dragover{
+  border-color:var(--accent);
+  background:radial-gradient(ellipse at 50% 0%,rgba(241,123,42,.1) 0%,transparent 70%),var(--bg);
+}
+.lib-upload-zone.dragover{ border-style:solid; }
+.lib-upload-glow{
+  position:absolute;top:-60px;left:50%;transform:translateX(-50%);
+  width:300px;height:300px;border-radius:50%;
+  background:radial-gradient(circle,rgba(241,123,42,.12) 0%,transparent 70%);
+  pointer-events:none;
+}
+.lib-upload-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:72px;height:72px;border-radius:18px;
+  background:linear-gradient(135deg,var(--surface),var(--card));
+  border:1px solid var(--border);
+  color:var(--accent);margin:0 auto 20px;
+  transition:transform .2s,box-shadow .2s;
+}
+.lib-upload-zone:hover .lib-upload-icon{ transform:translateY(-3px); box-shadow:0 12px 32px rgba(241,123,42,.2); }
+.lib-upload-title{font-size:20px;font-weight:800;letter-spacing:-.4px;margin-bottom:10px}
+.lib-upload-sub{font-size:14px;color:var(--muted);max-width:380px;margin:0 auto 22px;line-height:1.6}
+.lib-upload-tags{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
+.lib-upload-tags span{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:99px;padding:5px 14px;font-size:12px;
+  color:var(--muted);font-weight:500;
+}
+
+/* ── Blog panel ── */
+.blog-panel{margin:56px 0 0}
+.blog-panel-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:20px}
+.blog-panel-title{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.blog-panel-all{font-size:14px;color:var(--accent);text-decoration:none;font-weight:600;transition:opacity .15s}
+.blog-panel-all:hover{opacity:.75}
+.blog-panel-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.blog-panel-card{
+  display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--border);border-radius:16px;
+  padding:24px 22px;text-decoration:none;
+  transition:transform .2s,border-color .2s,box-shadow .2s;
+}
+.blog-panel-card:hover{transform:translateY(-4px);border-color:rgba(241,123,42,.35);box-shadow:0 12px 36px rgba(0,0,0,.45)}
+.blog-panel-tag{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.blog-panel-card-title{font-size:15px;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:8px;letter-spacing:-.2px}
+.blog-panel-card-desc{font-size:13px;color:var(--muted);line-height:1.65;flex:1;margin-bottom:16px}
+.blog-panel-read{font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.2px}
 
 /* ── Stats bar ── */
 .stats-bar{display:flex;align-items:center;justify-content:center;gap:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px 32px;margin:48px 0;flex-wrap:wrap}
@@ -384,7 +433,12 @@ input[type=range]{accent-color:var(--accent);cursor:pointer}
   .landing-shelf{display:none}
   .notify-bar{flex-direction:column;align-items:flex-start}
   .notify-input{min-width:0;width:100%}
-  .upload-pitch{flex-direction:column;gap:16px}
+  .lib-upload-zone{padding:48px 20px}
+  .lib-upload-title{font-size:17px}
+  .blog-panel-grid{grid-template-columns:1fr}
+}
+@media(max-width:840px){
+  .blog-panel-grid{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:960px){
   .how-grid{grid-template-columns:1fr}

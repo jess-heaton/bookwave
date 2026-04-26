@@ -187,29 +187,34 @@ function statusBadge(s) {
 
 // ── Netflix-style shelf rows ──────────────────────────────────────────────────
 const SHELF_CATEGORIES = [
-  { label: 'Horror & Gothic',          keys: ['Frankenstein','Dracula','Jekyll','Dorian Gray'] },
-  { label: 'Mystery & Detective',      keys: ['Sherlock Holmes','Baskervilles','Adventures of Sherlock'] },
-  { label: 'Philosophy & Wisdom',      keys: ['Meditations','Art of War','The Prince','The Republic','Zarathustra','Modest Proposal','The Odyssey','Odyssey'] },
-  { label: 'Russian Masters',          keys: ['Crime and Punishment','Anna Karenina','War and Peace','Brothers Karamazov'] },
-  { label: 'Science Fiction',          keys: ['Time Machine','War of the Worlds','Twenty Thousand Leagues','Around the World'] },
-  { label: 'American Classics',        keys: ['Great Gatsby','Scarlet Letter','Moby Dick','Tom Sawyer','Huckleberry Finn','Uncle Tom','Call of the Wild','Wizard of Oz','Little Women'] },
-  { label: 'World Literature',         keys: ['Don Quixote','Les Mis','Metamorphosis','Count of Monte Cristo'] },
-  { label: 'Classic Literature',       keys: [] },
+  { label: 'American Classics',   keys: ['Great Gatsby','Scarlet Letter','Moby Dick','Tom Sawyer','Huckleberry Finn','Uncle Tom','Call of the Wild','Wizard of Oz','Little Women'] },
+  { label: 'Horror & Gothic',     keys: ['Frankenstein','Dracula','Jekyll','Dorian Gray'] },
+  { label: 'Mystery & Detective', keys: ['Sherlock Holmes','Baskervilles','Adventures of Sherlock'] },
+  { label: 'Philosophy & Wisdom', keys: ['Meditations','Art of War','The Prince','The Republic','Zarathustra','Modest Proposal','The Odyssey','Odyssey'] },
+  { label: 'Russian Masters',     keys: ['Crime and Punishment','Anna Karenina','War and Peace','Brothers Karamazov'] },
+  { label: 'Science Fiction',     keys: ['Time Machine','War of the Worlds','Twenty Thousand Leagues','Around the World'] },
+  { label: 'World Literature',    keys: ['Don Quixote','Les Mis','Metamorphosis','Count of Monte Cristo'] },
 ];
 
 function categorizeShelves(books) {
-  const shelves = [];
   const used = new Set();
+  const buckets = new Map();
+  // First pass: slot every book into its named category (priority order)
   for (const cat of SHELF_CATEGORIES) {
-    const matched = cat.keys.length === 0
-      ? books.filter(b => !used.has(b.id))
-      : books.filter(b => !used.has(b.id) && cat.keys.some(k => b.title.includes(k)));
-    if (matched.length >= 2 || (cat.keys.length === 0 && matched.length > 0)) {
-      matched.forEach(b => used.add(b.id));
-      shelves.push({ label: cat.label, books: matched });
-    }
+    const matched = books.filter(b => !used.has(b.id) && cat.keys.some(k => b.title.includes(k)));
+    if (matched.length >= 2) { matched.forEach(b => used.add(b.id)); buckets.set(cat.label, matched); }
   }
-  return shelves;
+  // Remaining books → Classic Literature (catch-all)
+  const remaining = books.filter(b => !used.has(b.id));
+  // Build result: American Classics → Classic Literature → rest in defined order
+  const result = [];
+  if (buckets.has('American Classics')) result.push({ label: 'American Classics', books: buckets.get('American Classics') });
+  if (remaining.length > 0)             result.push({ label: 'Classic Literature', books: remaining });
+  for (const cat of SHELF_CATEGORIES) {
+    if (cat.label === 'American Classics') continue;
+    if (buckets.has(cat.label)) result.push({ label: cat.label, books: buckets.get(cat.label) });
+  }
+  return result;
 }
 
 function getContinueListening(books) {
@@ -309,28 +314,57 @@ async function renderLibrary() {
   const mineRow = (state.user && myBooks.length)
     ? shelfRow('My Books', myBooks) : '';
 
-  // Categorised public shelves
-  const shelves = categorizeShelves(publicBooks);
-  const shelfHTML = shelves.map(s => shelfRow(s.label, s.books)).join('');
+  // Categorised public shelves — American Classics first, then Classic Literature, then rest
+  const allShelves   = categorizeShelves(publicBooks);
+  const topShelves   = allShelves.slice(0, 2);   // American Classics + Classic Literature
+  const restShelves  = allShelves.slice(2);
+  const topShelfHTML = topShelves.map(s => shelfRow(s.label, s.books)).join('');
+  const restShelfHTML= restShelves.map(s => shelfRow(s.label, s.books)).join('');
 
   const emptyLibrary = !publicBooks.length ? `
     <div class="empty-state" style="margin:48px 0">
-      No public books yet. ${state.user ? 'Be the first to share one.' : '<button class="btn btn-primary" onclick="signIn()" style="margin-top:12px">Sign in to upload</button>'}
+      No public books yet. ${state.user ? 'Be the first to share one.' : ''}
     </div>` : '';
 
-  const uploadPitch = `
-    <section class="upload-pitch">
-      <div class="upload-pitch-icon">${uploadSvg(36)}</div>
-      <div class="upload-pitch-body">
-        <div class="upload-pitch-title">Upload your own book</div>
-        <div class="upload-pitch-sub">Have a book you own as a PDF or ePub? Upload it and we'll narrate it privately — just for you, never shared.</div>
-        <div class="upload-pitch-tags">
-          <span class="upload-tag">ePub supported</span>
-          <span class="upload-tag">PDF supported</span>
-          <span class="upload-tag">Private · DMCA-compliant</span>
-          <span class="upload-tag">Free</span>
-        </div>
-        <button class="btn btn-primary" style="margin-top:20px" onclick="openUpload()">Upload a book</button>
+  const uploadZone = `
+    <section class="lib-upload-zone"
+      ondragover="libDzOver(event)" ondragleave="libDzLeave(event)" ondrop="libDzDrop(event)"
+      onclick="openUpload()" id="lib-upload-zone">
+      <div class="lib-upload-glow"></div>
+      <div class="lib-upload-icon">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <div class="lib-upload-title">Drop your own book here</div>
+      <div class="lib-upload-sub">or click to browse — ePub or PDF, narrated privately, just for you</div>
+      <div class="lib-upload-tags">
+        <span>ePub</span><span>PDF</span><span>Private</span><span>DMCA-compliant</span><span>Free</span>
+      </div>
+    </section>`;
+
+  const BLOG_CARDS = [
+    { slug: 'best-free-public-domain-audiobooks',   tag: 'Public Domain', title: 'The 12 Best Free Public Domain Audiobooks', desc: 'From Jane Austen to Marcus Aurelius — the greatest classics, narrated and ready to play.' },
+    { slug: 'epub-pdf-to-audiobook',                tag: 'How-To',        title: 'How to Convert an ePub or PDF to Audiobook Free', desc: 'Step-by-step guide to turning any ebook into a natural-sounding audiobook using AI narration.' },
+    { slug: 'audiobooks-dyslexia-visual-impairment',tag: 'Accessibility',  title: 'Audiobooks for Dyslexia & Visual Impairment', desc: 'How listening helps with dyslexia, ADHD, and reading fatigue. Includes UK legal protections.' },
+    { slug: 'ai-audiobook-narration',               tag: 'AI Narration',  title: 'AI Audiobook Narration in 2025: Is It Good Enough?', desc: 'An honest look at how AI voices compare to human narrators — where they work and where they fall short.' },
+  ];
+  const blogPanel = `
+    <section class="blog-panel">
+      <div class="blog-panel-head">
+        <h2 class="blog-panel-title">From the blog</h2>
+        <a href="/blog" class="blog-panel-all">Read all →</a>
+      </div>
+      <div class="blog-panel-grid">
+        ${BLOG_CARDS.map(c => `
+          <a href="/blog/${c.slug}" class="blog-panel-card">
+            <div class="blog-panel-tag">${esc(c.tag)}</div>
+            <div class="blog-panel-card-title">${esc(c.title)}</div>
+            <div class="blog-panel-card-desc">${esc(c.desc)}</div>
+            <div class="blog-panel-read">Read article →</div>
+          </a>`).join('')}
       </div>
     </section>`;
 
@@ -338,8 +372,10 @@ async function renderLibrary() {
     <div class="page">
       ${hero}
       ${mineRow}
-      ${shelfHTML || emptyLibrary}
-      ${uploadPitch}
+      ${topShelfHTML || emptyLibrary}
+      ${uploadZone}
+      ${restShelfHTML}
+      ${blogPanel}
     </div>`;
 
   if (state.books.some(b => b.status === 'generating')) {
@@ -446,6 +482,18 @@ function dzDrop(e) {
   e.preventDefault(); dzLeave(e);
   const f = e.dataTransfer.files[0];
   if (f) fileChosen(f);
+}
+// Library-page inline upload zone
+function libDzOver(e) { e.preventDefault(); document.getElementById('lib-upload-zone')?.classList.add('dragover'); }
+function libDzLeave(e) { document.getElementById('lib-upload-zone')?.classList.remove('dragover'); }
+function libDzDrop(e) {
+  e.preventDefault(); e.stopPropagation();
+  document.getElementById('lib-upload-zone')?.classList.remove('dragover');
+  const f = e.dataTransfer?.files[0];
+  if (!f) return;
+  openUpload(); // opens modal
+  // Wait for modal to mount then set the file
+  requestAnimationFrame(() => { const dz = document.getElementById('drop-zone'); if (dz && f) { fileChosen(f); } });
 }
 function fileChosen(f) {
   if (!f || (!f.name.toLowerCase().endsWith('.pdf') && !f.name.toLowerCase().endsWith('.epub'))) return;
