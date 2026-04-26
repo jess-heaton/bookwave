@@ -163,6 +163,8 @@ async def init_db():
         await db.execute("""CREATE TABLE IF NOT EXISTS reports (
             id TEXT PRIMARY KEY, book_id TEXT, reporter_email TEXT,
             reason TEXT, status TEXT DEFAULT 'open', created REAL)""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS subscribers (
+            email TEXT PRIMARY KEY, created REAL)""")
         # Migrations for existing deploys
         async with db.execute("PRAGMA table_info(books)") as c:
             cols = {r[1] for r in await c.fetchall()}
@@ -1592,6 +1594,20 @@ async def get_stats():
             words = row["w"] or 0
     hours = round(words / 9000)  # ~150 wpm × 60 min
     return {"books": books, "hours": hours}
+
+@app.post("/api/subscribe")
+async def subscribe(request: Request):
+    body = await request.json()
+    email = (body.get("email") or "").strip().lower()
+    if not email or "@" not in email or len(email) > 320:
+        raise HTTPException(400, "Invalid email")
+    async with aiosqlite.connect(DB) as db:
+        try:
+            await db.execute("INSERT OR IGNORE INTO subscribers(email,created) VALUES(?,?)", (email, time.time()))
+            await db.commit()
+        except Exception:
+            pass
+    return {"ok": True}
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 def find_port(start=7777):

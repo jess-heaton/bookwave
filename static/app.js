@@ -60,7 +60,8 @@ function renderHeader() {
       ? `<img src="${state.user.picture}" alt="" referrerpolicy="no-referrer"/>`
       : `<span>${initial}</span>`;
     right.innerHTML = `
-      <button class="btn btn-primary" onclick="openUpload()">Add a Book</button>
+      <a class="header-nav-link" href="/blog">Blog</a>
+      <button class="btn btn-header-upload" onclick="openUpload()">Upload a book</button>
       <div class="user-menu" onclick="toggleUserMenu(event)">
         <div class="user-avatar">${img}</div>
         <div class="user-dropdown" id="user-dropdown">
@@ -72,7 +73,11 @@ function renderHeader() {
         </div>
       </div>`;
   } else {
-    right.innerHTML = `<button class="btn btn-primary" onclick="signIn()">Sign in</button>`;
+    right.innerHTML = `
+      <a class="header-nav-link" onclick="navigate('library');push('#/')">Browse</a>
+      <a class="header-nav-link" href="/blog">Blog</a>
+      <button class="header-nav-link header-signin" onclick="signIn()">Sign in</button>
+      <button class="btn btn-header-upload" onclick="openUpload()">Upload a book</button>`;
   }
 }
 function toggleUserMenu(e) {
@@ -175,11 +180,9 @@ function wordTime(w) {
 }
 function statusBadge(s) {
   return {
-    uploaded:   '<span class="badge b-blue">Processing</span>',
     generating: '<span class="badge b-orange">Generating…</span>',
-    complete:   '<span class="badge b-green">Ready</span>',
     error:      '<span class="badge b-red">Error</span>',
-  }[s] || `<span class="badge b-blue">${s}</span>`;
+  }[s] || '';
 }
 
 // ── Netflix-style shelf rows ──────────────────────────────────────────────────
@@ -226,10 +229,11 @@ function nfCard(book) {
   const coverEl = hasCover
     ? `<img src="${esc(book.cover)}" alt="${esc(book.title)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='flex')"/><div class="nf-ph" style="display:none">${initial}</div>`
     : `<div class="nf-ph">${initial}</div>`;
+  const badge = statusBadge(book.status);
   return `<div class="nf-card" onclick="navigate('book','${book.id}');push('#/book/${book.id}')">
     <div class="nf-cover">
       ${coverEl}
-      <div class="nf-overlay"><div class="nf-status">${statusBadge(book.status)}</div></div>
+      ${badge ? `<div class="nf-overlay"><div class="nf-status">${badge}</div></div>` : ''}
     </div>
     <div class="nf-meta">
       <div class="nf-title">${esc(book.title)}</div>
@@ -272,22 +276,17 @@ async function renderLibrary() {
       <button class="btn btn-primary continue-btn" onclick="event.stopPropagation();navigate('book','${cont.book.id}');push('#/book/${cont.book.id}')">Resume</button>
     </div>` : '';
 
-  const heroCTA = state.user
-    ? `<button class="btn btn-primary" onclick="openUpload()">Upload a Book</button>`
-    : `<div style="display:flex;gap:12px;flex-wrap:wrap"><button class="btn btn-primary" onclick="signIn()">Get started free</button><a href="/blog/best-free-public-domain-audiobooks" class="btn btn-ghost">Browse classics</a></div>`;
-
   const hero = `
     <div class="landing-split">
       <div class="landing-text">
-        <div class="landing-kicker">Free · Open · Built for listeners</div>
-        <h1>Every classic,<br>read aloud.<br><em>Or upload your own.</em></h1>
-        <p>Browse public domain audiobooks narrated with natural AI voices. Or upload any ePub or PDF you own — we'll narrate it privately, just for you.</p>
-        ${heroCTA}
-        <div class="trust-row">
-          <span>${shieldIcon()} Legal & DMCA-compliant</span>
-          <span>${accessIcon()} Built for accessibility</span>
-          <span>${lockIcon()} Your uploads stay private</span>
+        <div class="landing-kicker">FREE · NO SUBSCRIPTION · BUILT FOR ACCESSIBILITY</div>
+        <h1>Listen to any book.<br><em>No subscription.</em></h1>
+        <p>Browse public domain classics narrated with natural AI voices — or upload any ePub or PDF you own. We'll narrate it privately, just for you.</p>
+        <div class="hero-cta-row">
+          <button class="btn btn-outline-hero" onclick="document.querySelector('.shelf-row')?.scrollIntoView({behavior:'smooth'})">Browse classics</button>
+          <button class="btn btn-primary-hero" onclick="openUpload()">Upload your own book</button>
         </div>
+        <div class="hero-trust">No account needed to browse · Uploads stay private</div>
       </div>
       <div class="landing-shelf" aria-hidden="true">
         ${shelfTile('Pride and Prejudice','Jane Austen','Novel','/static/covers/pride.png')}
@@ -297,7 +296,14 @@ async function renderLibrary() {
         ${shelfTile('Meditations','Marcus Aurelius','Philosophy','/static/covers/meditations.png')}
       </div>
     </div>
-    ${continueBar}`;
+    ${continueBar}
+    <div class="notify-bar">
+      <span class="notify-label">Get notified when new books are added</span>
+      <div class="notify-form">
+        <input type="email" class="notify-input" id="notify-email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')subscribeEmail()"/>
+        <button class="btn notify-btn" onclick="subscribeEmail()">Notify me</button>
+      </div>
+    </div>`;
 
   // My Books row (private uploads, shown to logged-in user)
   const mineRow = (state.user && myBooks.length)
@@ -312,34 +318,19 @@ async function renderLibrary() {
       No public books yet. ${state.user ? 'Be the first to share one.' : '<button class="btn btn-primary" onclick="signIn()" style="margin-top:12px">Sign in to upload</button>'}
     </div>` : '';
 
-  // Speechify-style masonry testimonials
-  const TESTIMONIALS = [
-    { text: "I used to hate school because I'd spend hours just trying to read assignments. Listening has been totally life changing. This saved my education.", author: "Ana" },
-    { text: "This is the only review I've ever written. I listen to books about finance and history while I work. It brought me to the brink of tears how much easier reading has become for me.", author: "Leahliz1989" },
-    { text: "Might be one of the GOAT apps. You can literally get through an entire book in a day. Easily worth every penny — and it's free.", author: "TJV 34" },
-    { text: "I'm a junior doctor and Freedible saves me a ton of time. I listen while walking to clinic, running, making coffee in the morning.", author: "Theodota" },
-    { text: "Finally got through War and Peace. I'd been putting it off for a decade. Would never have managed it any other way.", author: "James T. · Edinburgh" },
-    { text: "The voice quality genuinely surprised me. Converted my entire philosophy reading list in one afternoon.", author: "Priya K. · London" },
-    { text: "I have dyslexia and Freedible changed how I experience books. I listen on my commute every single day.", author: "Sarah M. · Bradford" },
-    { text: "Miracle reader. Allows me to develop a personalised style of listening while proofing my work.", author: "M. Wright" },
-    { text: "Made my commute feel productive. Three Austen novels in a month.", author: "Claire B." },
-  ];
-  const testiHTML = TESTIMONIALS.map(t => `
-    <div class="testi-card">
-      <div class="testi-stars">★★★★★</div>
-      <div class="testi-text">${esc(t.text)}</div>
-      <div class="testi-name">${esc(t.author)}</div>
-    </div>`).join('');
-
-  const accessPitch = `
-    <section class="access-pitch">
-      <div class="access-pitch-inner">
-        <div class="access-pitch-icon">${accessIcon(40)}</div>
-        <div>
-          <div class="access-pitch-title">Built for accessibility</div>
-          <div class="access-pitch-sub">Freedible is protected under UK copyright law (CDPA 1988 s.31A/B) for format-shifting to accessible formats. If you have dyslexia, visual impairment, reading fatigue, or ADHD — audiobooks are a recognised reasonable adjustment, and Freedible is free.</div>
-          <a href="/accessibility" class="btn btn-ghost" style="margin-top:14px;font-size:13px">Learn more about accessibility →</a>
+  const uploadPitch = `
+    <section class="upload-pitch">
+      <div class="upload-pitch-icon">${uploadSvg(36)}</div>
+      <div class="upload-pitch-body">
+        <div class="upload-pitch-title">Upload your own book</div>
+        <div class="upload-pitch-sub">Have a book you own as a PDF or ePub? Upload it and we'll narrate it privately — just for you, never shared.</div>
+        <div class="upload-pitch-tags">
+          <span class="upload-tag">ePub supported</span>
+          <span class="upload-tag">PDF supported</span>
+          <span class="upload-tag">Private · DMCA-compliant</span>
+          <span class="upload-tag">Free</span>
         </div>
+        <button class="btn btn-primary" style="margin-top:20px" onclick="openUpload()">Upload a book</button>
       </div>
     </section>`;
 
@@ -348,11 +339,7 @@ async function renderLibrary() {
       ${hero}
       ${mineRow}
       ${shelfHTML || emptyLibrary}
-      <section class="testimonials-section">
-        <h2 class="section-title">What listeners say</h2>
-        <div class="testi-masonry">${testiHTML}</div>
-      </section>
-      ${accessPitch}
+      ${uploadPitch}
     </div>`;
 
   if (state.books.some(b => b.status === 'generating')) {
@@ -408,6 +395,20 @@ function bookCard(b) {
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 let uploadFile = null;
+async function subscribeEmail() {
+  const input = document.getElementById('notify-email');
+  if (!input) return;
+  const email = input.value.trim();
+  if (!email || !email.includes('@')) { input.focus(); return; }
+  try {
+    await api('POST', '/api/subscribe', { email });
+    input.closest('.notify-form').innerHTML = '<span class="notify-thanks">✓ You\'re on the list!</span>';
+    track('subscribe_notify', { email });
+  } catch {
+    input.placeholder = 'Something went wrong — try again';
+  }
+}
+
 function openUpload() {
   if (!state.user) { signIn(); return; }
   uploadFile = null;
@@ -415,11 +416,11 @@ function openUpload() {
     <div class="overlay" id="upload-overlay" onclick="closeUploadIfBg(event)">
       <div class="modal">
         <div class="modal-header">
-          <h2>Add a Book</h2>
+          <h2>Upload your own book</h2>
           <button class="ibtn" onclick="closeUpload()">${closeIcon()}</button>
         </div>
         <div class="modal-note">
-          Your upload is <strong>private by default</strong> — only you can see it. You can choose to share it with the community later if it's public domain or yours to share.
+          Have a book you own as a PDF or ePub? Upload it and we'll narrate it privately — just for you, never shared.
         </div>
         <div class="drop-zone" id="drop-zone"
              ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event)"
@@ -704,7 +705,7 @@ function renderBook(progData) {
       : `<div class="chap-num">${isReady ? '▶' : (isGenerating ? spinnerSmall() : '…')}</div>`;
     const badge = isGenerating
       ? '<span class="badge b-orange">Generating…</span>'
-      : { complete: '<span class="badge b-green">Ready</span>', pending: '<span class="badge b-blue">Pending</span>', error: '<span class="badge b-red">Error</span>' }[ch.status] || '';
+      : ch.status === 'error' ? '<span class="badge b-red">Error</span>' : '';
     return `<div class="${cls}" ${isReady ? `onclick="playChapter('${ch.id}')"` : ''}>
       ${num}
       <div class="chap-body">
